@@ -35,10 +35,10 @@ def test_last_window_ends_at_the_latest_event_end_across_cpu_and_gpu(tmp_path):
     assert split_steps(loaded(tmp_path, gpu_late), prefill_steps=0)[-1].end == Decimal(310)
 
 
-def test_last_window_is_never_negative_when_nothing_follows_the_schedule(tmp_path):
+def test_last_window_of_zero_duration_schedules_ends_at_the_last_schedule(tmp_path):
     builder = TraceBuilder().schedule(100, dur=0).schedule(200, dur=0)
     last = split_steps(loaded(tmp_path, builder), prefill_steps=0)[-1]
-    assert last.end >= last.start
+    assert (last.start, last.end) == (Decimal(200), Decimal(200))
 
 
 def test_prefill_steps_flag_marks_leading_steps(tmp_path):
@@ -109,3 +109,35 @@ def test_skipping_every_step_is_an_analysis_error(tmp_path):
     builder = TraceBuilder().schedule(100).schedule(200)
     with pytest.raises(AnalysisError, match="--skip-steps"):
         split_steps(loaded(tmp_path, builder), skip_steps=2)
+
+
+def test_prefill_steps_equal_to_step_count_is_allowed(tmp_path):
+    builder = TraceBuilder().schedule(100).schedule(200)
+    steps = split_steps(loaded(tmp_path, builder), prefill_steps=2)
+    assert [s.phase for s in steps] == ["prefill", "prefill"]
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"skip_steps": -1}, {"prefill_steps": -1}, {"prefill_steps": 0, "skip_steps": -2}]
+)
+def test_negative_counts_are_analysis_errors(tmp_path, kwargs):
+    builder = TraceBuilder().schedule(100).schedule(200).schedule(300)
+    with pytest.raises(AnalysisError):
+        split_steps(loaded(tmp_path, builder), **kwargs)
+
+
+@pytest.mark.parametrize("file_order", ["early_first", "late_first"])
+def test_the_first_launch_forward_in_a_window_decides_the_phase(tmp_path, file_order):
+    builder = TraceBuilder().schedule(100).schedule(200)
+    early = lambda: builder.launch_forward(110, 5, reqs=1, tokens=4096)  # noqa: E731
+    late = lambda: builder.launch_forward(150, 5, reqs=256, tokens=256)  # noqa: E731
+    for emit in (early, late) if file_order == "early_first" else (late, early):
+        emit()
+    assert split_steps(loaded(tmp_path, builder))[0].phase == "prefill"
+
+
+def test_skip_steps_with_auto_detection_keeps_the_original_numbering(tmp_path):
+    builder = TraceBuilder().schedule(100).schedule(200).schedule(300)
+    builder.launch_forward(110, 5, reqs=1, tokens=4096).launch_forward(210, 5, reqs=64, tokens=64)
+    steps = split_steps(loaded(tmp_path, builder), skip_steps=1)
+    assert [(s.index, s.phase) for s in steps] == [(1, "decode"), (2, "unknown")]

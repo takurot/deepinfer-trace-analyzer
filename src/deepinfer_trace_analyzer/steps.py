@@ -33,6 +33,8 @@ def split_steps(
 ) -> list[Step]:
     """Cut the trace into windows [schedule[k], schedule[k+1]) and label each prefill/decode/unknown."""
     starts = trace.schedule_starts
+    if skip_steps < 0 or (prefill_steps is not None and prefill_steps < 0):
+        raise AnalysisError("--skip-steps and --prefill-steps cannot be negative")
     if prefill_steps is not None and prefill_steps > len(starts):
         raise AnalysisError(f"--prefill-steps {prefill_steps} exceeds the {len(starts)} steps in the trace")
     if skip_steps >= len(starts):
@@ -45,7 +47,7 @@ def split_steps(
         if prefill_steps is not None:
             phase = "prefill" if index < prefill_steps else "decode"
         else:
-            phase = _phase_from_shape(shapes.get(index), Decimal(prefill_threshold))
+            phase = _phase_from_shape(shapes.get(index), prefill_threshold)
         steps.append(Step(index, starts[index], ends[index], phase))
     return steps
 

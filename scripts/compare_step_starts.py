@@ -10,6 +10,7 @@ from __future__ import annotations
 import gzip
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from deepinfer_trace_analyzer.loader import load_trace
@@ -36,7 +37,7 @@ def main(argv: list[str]) -> int:
     deepinfer, trace_path = Path(argv[1]), Path(argv[2])
     expected = reference_starts(deepinfer, trace_path)
     actual = load_trace(trace_path).schedule_starts
-    if [str(x) for x in expected] == [str(x) for x in actual]:
+    if [Decimal(str(x)) for x in expected] == actual:
         print(f"OK: {len(actual)} step starts match")
         return 0
     print(f"MISMATCH\n  _trace.py: {expected}\n  analyzer:  {actual}", file=sys.stderr)

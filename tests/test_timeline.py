@@ -117,10 +117,11 @@ def test_bubble_time_is_summed_per_window_and_clipped(tmp_path):
     assert last.bubble == D(40)
 
 
-def test_zero_duration_kernels_are_harmless(tmp_path):
-    builder = TraceBuilder().schedule(0).schedule(100).gpu("k", 10, 0).gpu("k2", 99, 1)
+def test_zero_duration_kernels_leave_no_trace(tmp_path):
+    builder = TraceBuilder().schedule(0).schedule(100).gpu("zero_len", 10, 0).gpu("k2", 99, 1)
     step = run(tmp_path, builder).steps[0]
     assert step.busy_union == D(1)
+    assert step.inclusive == {"other": D(1)} and step.exclusive == {"other": D(1)}
 
 
 def test_decimal_microsecond_precision_is_exact(tmp_path):
@@ -152,3 +153,24 @@ def test_exclusive_plus_idle_always_equals_step_time(tmp_path, seed):
         assert step.overlap == sum(step.inclusive.values()) - step.busy_union
         assert step.overlap >= 0 and step.idle >= 0
         assert all(step.exclusive[c] <= step.inclusive[c] for c in step.exclusive)
+
+
+def test_gpu_time_in_the_last_window_is_not_dropped(tmp_path):
+    builder = TraceBuilder().schedule(0).schedule(100).gpu("k", 150, 10)
+    assert run(tmp_path, builder).dropped_gpu_us == D(0)
+
+
+def test_launch_correlation_uses_the_earliest_cpu_event_whatever_the_file_order(tmp_path):
+    builder = TraceBuilder().schedule(0).schedule(100)
+    builder.launch(105, corr=1).launch(85, corr=1)
+    builder.gpu("deep_gemm", 90, 30, corr=1)
+    first, last = run(tmp_path, builder).steps
+    assert (first.spill_us, first.matched_us) == (D(0), D(10))
+    assert (last.spill_us, last.matched_us) == (D(20), D(20))
+
+
+def test_a_kernel_launched_before_the_first_schedule_counts_as_spill(tmp_path):
+    builder = TraceBuilder().schedule(100).schedule(200)
+    builder.kernel("deep_gemm", 110, 50, launch_ts=50)
+    first = run(tmp_path, builder).steps[0]
+    assert (first.matched_us, first.spill_us, first.unmatched_us) == (D(50), D(50), D(0))
