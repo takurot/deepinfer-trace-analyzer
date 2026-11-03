@@ -98,8 +98,8 @@ def _document(summary: Summary) -> dict:
         "unit": "us",
         "trace": str(summary.trace_path),
         "device": summary.device,
-        "options": {f.name: _plain(getattr(summary.options, f.name)) for f in fields(summary.options)},
-        "rules": [{"category": c, "pattern": p} for c, p in summary.classifier.rules()],
+        "options": options_document(summary.options),
+        "rules": rules_document(summary.classifier.rules()),
         "phases": [_phase_document(p) for p in summary.phases],
         "steps": [_step_document(t) for t in summary.step_times],
         "dropped_gpu_us": dec(summary.dropped_gpu_us),
@@ -108,6 +108,14 @@ def _document(summary: Summary) -> dict:
         else [{"name": n, "duration_us": dec(d)} for n, d in summary.unclassified],
         "warnings": summary.warnings,
     }
+
+
+def options_document(options) -> dict:
+    return {f.name: _plain(getattr(options, f.name)) for f in fields(options)}
+
+
+def rules_document(rules: list[tuple[str, str]]) -> list[dict]:
+    return [{"category": category, "pattern": pattern} for category, pattern in rules]
 
 
 def _plain(value):

@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from .summary import PHASE_ORDER, PhaseSummary, Summary
+from .model import IDLE, ZERO
+from .summary import PHASE_ORDER, Options, PhaseSummary, Summary
 
-IDLE = "idle"
-ZERO = Decimal(0)
+# Means are rounded at 28 digits, so a true zero can come out as ~1e-26.
+RESIDUAL_NOISE = Decimal("1E-12")
 UNMATCHED_WARN = Decimal("0.05")
 OTHER_WARN = Decimal("0.10")
 
@@ -49,7 +50,8 @@ class PhaseDiff:
     @property
     def residual(self) -> Decimal:
         """Step-time change that the exclusive rows and idle do not account for. Always zero."""
-        return self.step_time_delta - sum((row.delta for row in self.rows), ZERO)
+        residual = self.step_time_delta - sum((row.delta for row in self.rows), ZERO)
+        return residual if abs(residual) > RESIDUAL_NOISE else ZERO
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,8 @@ class Diff:
     before_path: Path
     after_path: Path
     device: int
+    options: Options
+    rules: list[tuple[str, str]]
     phases: list[PhaseDiff]
     warnings: list[str]
 
@@ -77,7 +81,8 @@ def compare(before: Summary, after: Summary) -> Diff:
             continue
         warnings += _phase_warnings(old, new)
         phases.append(_phase_diff(old, new))
-    return Diff(before.trace_path, after.trace_path, before.device, phases, warnings)
+    rules = before.classifier.rules()
+    return Diff(before.trace_path, after.trace_path, before.device, before.options, rules, phases, warnings)
 
 
 def _phase_warnings(old: PhaseSummary, new: PhaseSummary) -> list[str]:
@@ -91,7 +96,8 @@ def _phase_warnings(old: PhaseSummary, new: PhaseSummary) -> list[str]:
             )
         if phase.other_ratio > OTHER_WARN:
             found.append(
-                f"{side} {phase.phase}: {phase.other_ratio:.0%} of step time is 'other' (rules may not fit)"
+                f"{side} {phase.phase}: {phase.other_ratio:.0%} of step time is 'other'; "
+                "try --show-unclassified or --rules"
             )
     return found
 
