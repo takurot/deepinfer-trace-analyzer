@@ -65,10 +65,11 @@
 **GPU イベントの step への割り当て**
 
 - 時間の分解（§FR-4）は、GPU イベントの区間 `[ts, ts+dur)` を step 窓で切り取って行う。窓をまたぐイベントは、窓ごとに切り分ける。窓の長さの合計は壁時計の時間なので、`Σexclusive + idle = step_time` が成り立つ。
-- どの窓にも入らない GPU 時間（最初の schedule より前、最後の窓より後）は捨て、その時間（μs）を `dropped_gpu_us` として出す。
+- 最初の schedule より前の GPU 時間は捨て、その時間（μs）を `dropped_gpu_us` として出す。`--skip-steps` で外した step の時間は、利用者が外したものなので `dropped_gpu_us` に数えない。最後の窓は最後のイベントの終了時刻までなので、それより後の時間はない。
 - **診断値:** launch は、時間の分解には使わず、次の 2 つの診断にだけ使う。
   - `unmatched_ratio` = launch の CPU イベントが見つからない GPU イベントの `dur` の合計 / 全 GPU イベントの `dur` の合計。
-  - `spill_ratio` = 窓 k に入った GPU の稼働時間のうち、窓 k より前の step で launch されたカーネルの時間の割合。zero-overhead scheduling では 0 より大きくなる。launch が見つからないカーネルは数えない。
+  - `spill_ratio` = 窓 k に入った、launch が見つかったカーネルの `dur`（窓で切り取った分）の合計のうち、窓 k より前の step で launch されたものの割合。最初の schedule より前に launch されたカーネルは、前の step のものとして数える。zero-overhead scheduling では 0 より大きくなる。launch が見つからないカーネルは分母に入れない。
+  - `unmatched_ratio` の分母は、窓で切り取った全 GPU イベントの `dur` の合計。
 
 **phase の判定**（優先順）
 
@@ -78,7 +79,7 @@
 
 **除外**
 
-- `--skip-steps K` で先頭の K step を集計から外す。profile server の trace では、プロファイラ起動直後の step を外すために使う。既定は 0。
+- `--skip-steps K` で先頭の K step を集計から外す。profile server の trace では、プロファイラ起動直後の step を外すために使う。既定は 0。`--skip-steps` と `--prefill-steps` に負の値は使えない（終了コード 2）。
 
 ### FR-3 カーネルの分類
 
@@ -86,7 +87,7 @@
 - 照合の対象は `name`（torch が出力するデマングル済みの名前）とする。`cat` が `gpu_memcpy` か `gpu_memset` のイベントは、名前で照合せずに `memcpy` に入れる。
 - 規則の上書きは、`--rules rules.toml` で行う（`tomllib` は標準ライブラリなので、依存を増やさない）。ユーザーの規則は既定の規則の前に評価される。既定の規則を使わないときは `--no-default-rules` を付ける。
 - ユーザーの規則に `other` と `memcpy` は使えない。この 2 つは分類器が決める予約済みのカテゴリで、使うと不正な規則ファイルとして扱う。
-- どの規則にも当たらないものは `other` に入れる。`--show-unclassified [K]` を付けると、`other` に入った exclusive 時間の上位 K 個（既定 20）のカーネル名を出し、規則を育てる材料にする。
+- どの規則にも当たらないものは `other` に入れる。`--show-unclassified [K]` を付けると、`other` に入ったカーネルを名前ごとに `dur` の合計（inclusive 時間）で並べ、上位 K 個（既定 20）を出し、規則を育てる材料にする。カーネル単位の exclusive 時間は、カテゴリ単位でしか分配しないため出さない。
 
 `rules.toml` の形:
 
