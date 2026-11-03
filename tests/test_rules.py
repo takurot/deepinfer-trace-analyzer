@@ -96,3 +96,108 @@ def test_invalid_rule_files_are_analysis_errors(tmp_path, text):
 def test_missing_rule_file_is_input_error(tmp_path):
     with pytest.raises(InputError):
         Classifier.from_file(tmp_path / "missing.toml")
+
+
+def test_categories_are_listed_in_rule_order_then_memcpy_and_other():
+    assert Classifier.default().categories() == [
+        "comm.nccl",
+        "comm.deepep",
+        "attn.flashmla",
+        "gemm.deepgemm",
+        "gemm.other",
+        "tilelang",
+        "sampler",
+        "memcpy",
+        "other",
+    ]
+
+
+def test_user_categories_lead_the_category_list(tmp_path):
+    rules = tmp_path / "rules.toml"
+    rules.write_text(
+        '[[rule]]\ncategory = "mine"\npattern = "x"\n[[rule]]\ncategory = "gemm.other"\npattern = "y"\n'
+    )
+    assert Classifier.from_file(rules).categories()[:3] == ["mine", "gemm.other", "comm.nccl"]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("deepep_dispatch", "comm.deepep"),
+        ("flashmla_fwd", "attn.flashmla"),
+        ("sparse_attn_kernel", "attn.flashmla"),
+        ("fp8_gemm_kernel", "gemm.deepgemm"),
+        ("cutlass_universal", "gemm.other"),
+        ("cublasLt_matmul", "gemm.other"),
+        ("sampler_top_k_kernel", "sampler"),
+        ("sampling_kernel", "sampler"),
+        ("topk_kernel", "sampler"),
+    ],
+)
+def test_every_alternative_in_the_default_patterns_matches(name, expected):
+    assert Classifier.default().classify(name, "kernel") == expected
+
+
+@pytest.mark.parametrize(
+    "name", ["softmax_kernel", "moe_combine_x", "dispatch_tokens", "notify_peers", "tl_foo"]
+)
+def test_patterns_the_spec_removed_stay_unclassified(name):
+    assert Classifier.default().classify(name, "kernel") == "other"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("deep_ep_gemm", "comm.deepep"),
+        ("flash_mla_gemm", "attn.flashmla"),
+        ("tilelang_topk", "tilelang"),
+        ("nccl_topk", "comm.nccl"),
+        ("deep_gemm_topk", "gemm.deepgemm"),
+    ],
+)
+def test_earlier_rules_win_when_two_match(name, expected):
+    assert Classifier.default().classify(name, "kernel") == expected
+
+
+def test_a_user_rule_reusing_a_default_category_keeps_the_earlier_position(tmp_path):
+    rules = tmp_path / "rules.toml"
+    rules.write_text('[[rule]]\ncategory = "tilelang"\npattern = "x"\n')
+    classifier = Classifier.from_file(rules)
+    assert classifier.priority("tilelang") < classifier.priority("gemm.deepgemm")
+
+
+def test_user_categories_rank_before_default_categories_in_the_same_tier(tmp_path):
+    rules = tmp_path / "rules.toml"
+    rules.write_text('[[rule]]\ncategory = "mine"\npattern = "x"\n')
+    classifier = Classifier.from_file(rules)
+    assert classifier.priority("mine") < classifier.priority("gemm.deepgemm")
+
+
+def test_a_kernel_named_like_a_copy_is_still_classified_by_name():
+    assert Classifier.default().classify("Memcpy HtoD", "kernel") == "other"
+
+
+def test_rule_files_do_not_leak_between_classifiers(tmp_path):
+    rules = tmp_path / "rules.toml"
+    rules.write_text('[[rule]]\ncategory = "mine"\npattern = "zzz"\n')
+    custom = Classifier.from_file(rules)
+    assert custom.classify("zzz", "kernel") == "mine"
+    assert Classifier.default().classify("zzz", "kernel") == "other"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["rule = 3\n", "rule = [1]\n", '[[rule]]\ncategory = "x"\npattern = 3\n'],
+)
+def test_wrongly_shaped_rule_entries_are_analysis_errors(tmp_path, text):
+    rules = tmp_path / "rules.toml"
+    rules.write_text(text)
+    with pytest.raises(AnalysisError):
+        Classifier.from_file(rules)
+
+
+def test_rule_file_that_is_not_utf8_is_an_analysis_error(tmp_path):
+    rules = tmp_path / "rules.toml"
+    rules.write_bytes(b"\xff\xfe\x00")
+    with pytest.raises(AnalysisError):
+        Classifier.from_file(rules)
