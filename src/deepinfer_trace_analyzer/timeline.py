@@ -10,8 +10,9 @@ from .model import Trace
 from .rules import Classifier
 from .steps import Step
 
-BUBBLE_NAME = "deepinfer:bubble"
 ZERO = Decimal(0)
+# Wide enough that sums of nanosecond-resolution timestamps stay exact.
+PRECISION = 60
 
 
 class _Interval(NamedTuple):
@@ -62,13 +63,14 @@ def decompose(trace: Trace, steps: list[Step], classifier: Classifier, device: i
     sum(exclusive) + idle == step_time. Inclusive time sums durations and counts overlap twice.
     """
     with localcontext() as context:
-        context.prec = 60
+        context.prec = PRECISION
         intervals = _intervals(trace, classifier, device)
         starts = [step.start for step in steps]
         pieces: list[list[_Interval]] = [[] for _ in steps]
         for interval in intervals:
             for index, start, end in _slices(interval.start, interval.end, starts, steps):
-                pieces[index].append(interval._replace(start=start, end=end))
+                inside = start == interval.start and end == interval.end
+                pieces[index].append(interval if inside else interval._replace(start=start, end=end))
         bubbles = _bubble_per_window(trace, starts, steps)
         times = [
             _step_time(step, window, bubble, classifier)
@@ -80,18 +82,13 @@ def decompose(trace: Trace, steps: list[Step], classifier: Classifier, device: i
 def _intervals(trace: Trace, classifier: Classifier, device: int) -> list[_Interval]:
     """The only place that reads GpuEvent fields; everything after works on these tuples."""
     schedule_starts = trace.schedule_starts
-    launches: dict[int, Decimal] = {}
-    for event in trace.cpu_events:
-        if event.correlation is not None and (
-            event.correlation not in launches or event.ts < launches[event.correlation]
-        ):
-            launches[event.correlation] = event.ts
+    launches = trace.launches
     result = []
     for event in trace.gpu_events:
         if event.device != device or event.dur <= 0:
             continue
-        launched = launches.get(event.correlation) if event.correlation is not None else None
-        launch_step = None if launched is None else bisect_right(schedule_starts, launched) - 1
+        launch = launches.get(event.correlation) if event.correlation is not None else None
+        launch_step = None if launch is None else bisect_right(schedule_starts, launch.ts) - 1
         result.append(_Interval(event.ts, event.end, classifier.classify(event.name, event.cat), launch_step))
     result.sort(key=lambda interval: interval.start)
     return result
@@ -111,10 +108,9 @@ def _slices(
 
 def _bubble_per_window(trace: Trace, starts: list[Decimal], steps: list[Step]) -> list[Decimal]:
     totals = [ZERO] * len(steps)
-    for event in trace.cpu_events:
-        if event.name == BUBBLE_NAME:
-            for index, low, high in _slices(event.ts, event.ts + event.dur, starts, steps):
-                totals[index] += high - low
+    for event in trace.bubbles:
+        for index, low, high in _slices(event.ts, event.ts + event.dur, starts, steps):
+            totals[index] += high - low
     return totals
 
 
@@ -138,16 +134,19 @@ def _step_time(step: Step, pieces: list[_Interval], bubble: Decimal, classifier:
 
 
 def _exclusive(pieces: list[_Interval], classifier: Classifier) -> dict[str, Decimal]:
+    # Sorting on time alone is enough: segments of zero length add nothing, so the order of an
+    # end and a start at the same instant does not matter.
     edges = sorted(
         [(p.start, 1, p.category) for p in pieces] + [(p.end, -1, p.category) for p in pieces],
         key=lambda edge: edge[0],
     )
+    rank = {category: classifier.priority(category) for category in {p.category for p in pieces}}
     active: dict[str, int] = {}
     exclusive: dict[str, Decimal] = {}
     previous = None
     for time, delta, category in edges:
         if active and previous is not None and time > previous:
-            winner = min(active, key=classifier.priority)
+            winner = min(active, key=rank.__getitem__)
             exclusive[winner] = exclusive.get(winner, ZERO) + (time - previous)
         previous = time
         count = active.get(category, 0) + delta
