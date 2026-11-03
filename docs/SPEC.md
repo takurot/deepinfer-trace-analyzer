@@ -79,13 +79,14 @@
 
 **除外**
 
-- `--skip-steps K` で先頭の K step を集計から外す。profile server の trace では、プロファイラ起動直後の step を外すために使う。既定は 0。`--skip-steps` と `--prefill-steps` に負の値は使えない（終了コード 2）。
+- `--skip-steps K` で先頭の K step を集計から外す。profile server の trace では、プロファイラ起動直後の step を外すために使う。既定は 0。`--skip-steps` と `--prefill-steps` に負の値は使えない（終了コード 2）。`--prefill-steps N` の N は、`--skip-steps` に関係なく trace の先頭から数える。
 
 ### FR-3 カーネルの分類
 
 - 規則は `(category, pattern)` の列で、上から順に当て、最初に当たったカテゴリに入れる。パターンは Python の正規表現で、`re.search`、大文字小文字を区別しない、で照合する。
 - 照合の対象は `name`（torch が出力するデマングル済みの名前）とする。`cat` が `gpu_memcpy` か `gpu_memset` のイベントは、名前で照合せずに `memcpy` に入れる。
 - 規則の上書きは、`--rules rules.toml` で行う（`tomllib` は標準ライブラリなので、依存を増やさない）。ユーザーの規則は既定の規則の前に評価される。既定の規則を使わないときは `--no-default-rules` を付ける。
+- カテゴリ名が `comm.` で始まるものだけが通信として扱われ、exclusive 時間の分配で優先度が最も低くなる（§FR-4）。通信のカテゴリを足すときは `comm.` を付ける。
 - ユーザーの規則に `other` と `memcpy` は使えない。この 2 つは分類器が決める予約済みのカテゴリで、使うと不正な規則ファイルとして扱う。
 - どの規則にも当たらないものは `other` に入れる。`--show-unclassified [K]` を付けると、`other` に入ったカーネルを名前ごとに `dur` の合計（inclusive 時間）で並べ、上位 K 個（既定 20）を出し、規則を育てる材料にする。カーネル単位の exclusive 時間は、カテゴリ単位でしか分配しないため出さない。
 
@@ -185,7 +186,7 @@ CI でしきい値をチェックする用途は v0.2 以降で検討する。
 |---|---|
 | 0 | 成功（警告があっても 0） |
 | 1 | 入力が読めない（trace や規則ファイルがない、JSON として壊れている、トップレベルの形式が不明、`traceEvents` が配列でない） |
-| 2 | 入力は読めたが解析できない（`deepinfer:schedule` がない、`--prefill-steps` が step 数より大きい、規則ファイルの内容が不正（TOML の構文エラー、UTF-8 でない、キーの欠落、壊れた正規表現、予約済みカテゴリの使用）） |
+| 2 | 入力は読めたが解析できない（`deepinfer:schedule` がない、`--prefill-steps` が step 数より大きい、規則ファイルの内容が不正（TOML の構文エラー、UTF-8 でない、キーの欠落、壊れた正規表現、予約済みカテゴリの使用）、`--prefill-threshold` が正の有限な数でない、`--show-unclassified` が 1 未満、GPU イベントがある trace に `--device` の device がない） |
 
 警告とエラーは標準エラーに出し、標準出力は結果だけにする（JSON をパイプで渡せるようにするため）。
 

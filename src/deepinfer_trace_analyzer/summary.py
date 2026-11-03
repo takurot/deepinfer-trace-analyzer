@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from .errors import AnalysisError
 from .loader import load_trace
+from .model import ZERO
 from .rules import OTHER, Classifier
 from .steps import DEFAULT_PREFILL_THRESHOLD, split_steps
 from .timeline import StepTime, decompose
 
 PHASE_ORDER = ("prefill", "decode", "unknown")
-ZERO = Decimal(0)
 
 
 @dataclass(frozen=True)
@@ -84,14 +85,25 @@ def summarize(path: str | Path, options: Options) -> Summary:
     if not trace.devices:
         warnings.append("the trace has no GPU events, so every step shows 100% idle (a non-CUDA trace?)")
     elif options.device not in trace.devices:
-        warnings.append(f"device {options.device} has no GPU events (trace has devices {trace.devices})")
+        raise AnalysisError(f"device {options.device} has no GPU events (trace has devices {trace.devices})")
+    if options.prefill_steps is None and any(step.phase == "unknown" for step in steps):
+        warnings.append(
+            "some steps have no launch_forward event, so their phase is unknown; pass --prefill-steps N"
+        )
     unclassified = None
     if options.show_unclassified is not None:
         unclassified = _top_unclassified(trace, classifier, options, steps[0].start, steps[-1].end)
     return Summary(
-        trace.path, options, options.device, classifier, phases, decomposition.steps,
-        decomposition.dropped_gpu_us, unclassified, warnings,
-    )  # fmt: skip
+        trace_path=trace.path,
+        options=options,
+        device=options.device,
+        classifier=classifier,
+        phases=phases,
+        step_times=decomposition.steps,
+        dropped_gpu_us=decomposition.dropped_gpu_us,
+        unclassified=unclassified,
+        warnings=warnings,
+    )
 
 
 def _phase_summary(name: str, group: list[StepTime], classifier: Classifier) -> PhaseSummary:
