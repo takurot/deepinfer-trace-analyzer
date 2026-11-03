@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import fields
 from decimal import Decimal
+
+SCHEMA_VERSION = 1
 
 
 def dec(value: Decimal) -> str:
@@ -23,3 +26,15 @@ def signed(value: Decimal) -> str:
 
 def percent(value: Decimal | None) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
+
+
+def options_document(options: object) -> dict:
+    return {f.name: _plain(getattr(options, f.name)) for f in fields(options)}
+
+
+def rules_document(rules: list[tuple[str, str]]) -> list[dict]:
+    return [{"category": category, "pattern": pattern} for category, pattern in rules]
+
+
+def _plain(value: object) -> object:
+    return dec(value) if isinstance(value, Decimal) else value

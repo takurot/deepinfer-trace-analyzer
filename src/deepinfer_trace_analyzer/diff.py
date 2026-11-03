@@ -4,13 +4,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from .model import IDLE, ZERO
+from .model import IDLE, OTHER_SHARE_LIMIT, UNMATCHED_SHARE_LIMIT, ZERO
 from .summary import PHASE_ORDER, Options, PhaseSummary, Summary
 
 # Means are rounded at 28 digits, so a true zero can come out as ~1e-26.
 RESIDUAL_NOISE = Decimal("1E-12")
-UNMATCHED_WARN = Decimal("0.05")
-OTHER_WARN = Decimal("0.10")
 
 
 @dataclass(frozen=True)
@@ -90,11 +88,11 @@ def _phase_warnings(old: PhaseSummary, new: PhaseSummary) -> list[str]:
     if old.steps != new.steps:
         found.append(f"{old.phase}: {old.steps} steps before, {new.steps} after (values are per-step means)")
     for side, phase in (("before", old), ("after", new)):
-        if phase.unmatched_ratio is not None and phase.unmatched_ratio > UNMATCHED_WARN:
+        if phase.unmatched_ratio is not None and phase.unmatched_ratio > UNMATCHED_SHARE_LIMIT:
             found.append(
                 f"{side} {phase.phase}: {phase.unmatched_ratio:.0%} of GPU time is unmatched (no launch)"
             )
-        if phase.other_ratio > OTHER_WARN:
+        if phase.other_ratio > OTHER_SHARE_LIMIT:
             found.append(
                 f"{side} {phase.phase}: {phase.other_ratio:.0%} of step time is 'other'; "
                 "try --show-unclassified or --rules"

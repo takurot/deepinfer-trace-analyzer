@@ -2,7 +2,7 @@
 
 [DeepInfer](https://github.com/deepseek-ai/DeepInfer) が出力する torch profiler の chrome trace を、step 単位・カーネルのカテゴリ単位で集計する CLI。設定を変える前と後の 2 つの trace の差分も出せる。
 
-> **ステータス: v0.1 開発中。** `summary` と `diff` は動作します。実機の trace による分類規則の確認は未完了です（[docs/SPEC.md](docs/SPEC.md) の §8、Issue #11）。機能仕様は [docs/SPEC.md](docs/SPEC.md) を参照。
+> **ステータス: v0.1 開発中。** `summary` と `diff` は動作します。実機の trace による分類規則の確認は未完了です（[docs/SPEC.md](docs/SPEC.md) の §8、Issue #11）。機能仕様は [docs/SPEC.md](docs/SPEC.md)、実機の trace で検証する手順は [docs/REAL_TRACE_RUNBOOK.md](docs/REAL_TRACE_RUNBOOK.md)、性能は [docs/PERFORMANCE.md](docs/PERFORMANCE.md) を参照。
 
 ## 何をするか
 
@@ -28,6 +28,17 @@ uv run deepinfer-trace-analyzer diff before.json after.json --prefill-steps 2 --
 - 終了コードは、成功が 0、入力が読めないのが 1、読めたが解析できないのが 2 です。
 
 DeepInfer 本体にも GPU にも依存しない、純粋な Python の JSON 処理として実装する。
+
+## 開発
+
+```bash
+uv sync
+uv run pytest          # テスト
+uv run ruff check . && uv run ruff format --check .
+```
+
+- `src/deepinfer_trace_analyzer/` は、読み込み（`loader`）、step の分割（`steps`）、時間の分解（`timeline`）、分類（`rules`）、集計（`summary`、`diff`）、出力（`render`、`render_diff`）に分かれています。
+- `scripts/` は開発用です。`make_synthetic_trace.py` と `bench_summary.py` は性能の確認（[docs/PERFORMANCE.md](docs/PERFORMANCE.md)）、`real_trace_report.py` と `compare_step_starts.py` は実機の trace の検証（[docs/REAL_TRACE_RUNBOOK.md](docs/REAL_TRACE_RUNBOOK.md)）に使います。
 
 ## ライセンス
 

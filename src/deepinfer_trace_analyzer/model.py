@@ -8,6 +8,9 @@ from pathlib import Path
 GPU_CATEGORIES = frozenset({"kernel", "gpu_memcpy", "gpu_memset"})
 MEMORY_CATEGORIES = frozenset({"gpu_memcpy", "gpu_memset"})
 ZERO = Decimal(0)
+# Shares above these make a trace untrustworthy: SPEC section 6 (criterion 2) and FR-7.
+OTHER_SHARE_LIMIT = Decimal("0.10")
+UNMATCHED_SHARE_LIMIT = Decimal("0.05")
 IDLE = "idle"
 SCHEDULE_NAME = "deepinfer:schedule"
 BUBBLE_NAME = "deepinfer:bubble"
