@@ -25,4 +25,4 @@ DeepInfer 本体にも GPU にも依存しない、純粋な Python の JSON 処
 
 ## ライセンス
 
-未定。
+[MIT](LICENSE)
