@@ -85,7 +85,7 @@ def test_unusable_gpu_events_are_reported_not_fatal(tmp_path):
     builder.raw({"ph": "X", "cat": "kernel", "name": "nodur", "pid": 0, "tid": 1, "ts": 1})
     trace = load_trace(builder.write(tmp_path / "t.json"))
     assert len(trace.gpu_events) == 2
-    assert len(trace.warnings) == 1 and "2 GPU events" in trace.warnings[0]
+    assert len(trace.warnings) == 1 and "skipped 2 events" in trace.warnings[0]
 
 
 def test_missing_file_is_input_error(tmp_path):

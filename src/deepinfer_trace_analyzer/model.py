@@ -36,12 +36,6 @@ class Trace:
     path: Path
     cpu_events: list[CpuEvent]
     gpu_events: list[GpuEvent]
+    schedule_starts: list[Decimal]
+    devices: list[int]
     warnings: list[str] = field(default_factory=list)
-
-    @property
-    def schedule_starts(self) -> list[Decimal]:
-        return sorted(e.ts for e in self.cpu_events if e.name == SCHEDULE_NAME)
-
-    @property
-    def devices(self) -> list[int]:
-        return sorted({e.device for e in self.gpu_events})
