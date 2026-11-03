@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 
 from .errors import AnalysisError, InputError
@@ -37,8 +36,10 @@ class Classifier:
 
     def __init__(self, rules: tuple[Rule, ...]) -> None:
         self._rules = rules
-        self._order = {rule.category: index for index, rule in reversed(list(enumerate(rules)))}
-        self.classify = cache(self._classify_name)
+        self._order: dict[str, int] = {}
+        for index, rule in enumerate(rules):
+            self._order.setdefault(rule.category, index)
+        self._by_name: dict[str, str] = {}
 
     @classmethod
     def default(cls) -> Classifier:
@@ -50,13 +51,14 @@ class Classifier:
         defaults = _compile(DEFAULT_RULES) if use_defaults else ()
         return cls(user + defaults)
 
-    def _classify_name(self, name: str, cat: str) -> str:
+    def classify(self, name: str, cat: str) -> str:
         if cat in MEMORY_CATEGORIES:
             return MEMCPY
-        for rule in self._rules:
-            if rule.pattern.search(name):
-                return rule.category
-        return OTHER
+        category = self._by_name.get(name)
+        if category is None:
+            category = next((rule.category for rule in self._rules if rule.pattern.search(name)), OTHER)
+            self._by_name[name] = category
+        return category
 
     def priority(self, category: str) -> tuple[int, int]:
         """Lower sorts first. Compute beats memcpy beats communication, ties by rule order."""
@@ -79,6 +81,8 @@ def _read_rules_file(path: Path) -> tuple[Rule, ...]:
         document = tomllib.loads(path.read_text(encoding="utf-8"))
     except OSError as error:
         raise InputError(f"{path}: {error.strerror or error}") from error
+    except UnicodeDecodeError as error:
+        raise AnalysisError(f"{path}: not valid UTF-8 ({error})") from error
     except tomllib.TOMLDecodeError as error:
         raise AnalysisError(f"{path}: invalid TOML ({error})") from error
     entries = document.get("rule", [])
