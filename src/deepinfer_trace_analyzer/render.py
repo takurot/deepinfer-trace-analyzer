@@ -27,7 +27,8 @@ def _percent(value: Decimal | None) -> str:
 
 def _heading(phase: PhaseSummary) -> str:
     plural = "step" if phase.steps == 1 else "steps"
-    return f"{phase.phase}: {phase.steps} {plural}, step time mean {_us(phase.step_time_mean)} us, max {_us(phase.step_time_max)} us"
+    mean, longest = _us(phase.step_time_mean), _us(phase.step_time_max)
+    return f"{phase.phase}: {phase.steps} {plural}, step time mean {mean} us, max {longest} us"
 
 
 def _rows(phase: PhaseSummary) -> list[tuple[str, str, str, str]]:
@@ -48,8 +49,9 @@ def _rows(phase: PhaseSummary) -> list[tuple[str, str, str, str]]:
 
 def _diagnostics(phase: PhaseSummary) -> str:
     return (
-        f"overlap {_us(phase.overlap_mean)} us, bubble {_us(phase.bubble_mean)} us, other {_percent(phase.other_ratio)}, "
-        f"unmatched {_percent(phase.unmatched_ratio)}, spill {_percent(phase.spill_ratio)}"
+        f"overlap {_us(phase.overlap_mean)} us, bubble {_us(phase.bubble_mean)} us, "
+        f"other {_percent(phase.other_ratio)}, unmatched {_percent(phase.unmatched_ratio)}, "
+        f"spill {_percent(phase.spill_ratio)}"
     )
 
 
