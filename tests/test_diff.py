@@ -13,10 +13,16 @@ from deepinfer_trace_analyzer.summary import Options, summarize
 GOLDEN = Path(__file__).parent / "golden"
 
 
+def launched_memcpy(builder: TraceBuilder, ts, dur, launch_ts) -> TraceBuilder:
+    corr = builder.corr()
+    builder.launch(launch_ts, corr=corr, name="cudaMemcpyAsync")
+    return builder.gpu("Memcpy HtoD", ts, dur, cat="gpu_memcpy", corr=corr)
+
+
 def before_builder() -> TraceBuilder:
     builder = TraceBuilder().schedule(0).schedule(100)
     builder.kernel("deep_gemm", 10, 30, launch_ts=5).kernel("nccl_all_reduce", 30, 30, launch_ts=6, stream=8)
-    builder.memcpy(70, 5)
+    launched_memcpy(builder, 70, 5, 65)
     builder.kernel("deep_gemm", 110, 20, launch_ts=105).kernel("deep_gemm", 140, 10, launch_ts=135)
     return builder
 
@@ -24,7 +30,7 @@ def before_builder() -> TraceBuilder:
 def after_builder() -> TraceBuilder:
     builder = TraceBuilder().schedule(0).schedule(100)
     builder.kernel("deep_gemm", 10, 30, launch_ts=5).kernel("nccl_all_reduce", 20, 20, launch_ts=6, stream=8)
-    builder.memcpy(70, 5)
+    launched_memcpy(builder, 70, 5, 65)
     builder.kernel("deep_gemm", 110, 15, launch_ts=105).kernel("deep_gemm", 130, 10, launch_ts=125)
     return builder
 
@@ -97,7 +103,7 @@ def test_per_step_means_make_traces_of_different_length_comparable(tmp_path):
     decode = compare(a, b).phases[1]
     assert (decode.steps_before, decode.steps_after) == (1, 2)
     assert any("decode" in w and "1" in w and "2" in w for w in compare(a, b).warnings)
-    assert decode.step_time_after == D(50)
+    assert decode.step_time_before == D(50) and decode.step_time_after == D(75)
 
 
 def test_warns_when_a_trace_is_poorly_matched_or_poorly_classified(tmp_path):
