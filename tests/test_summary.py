@@ -1,7 +1,6 @@
 from decimal import Decimal as D
 
 from builders import TraceBuilder
-
 from deepinfer_trace_analyzer.summary import Options, summarize
 
 
@@ -48,7 +47,11 @@ def test_skip_steps_leaves_them_out_of_the_averages(tmp_path):
 
 
 def test_phases_are_detected_from_launch_forward_when_not_given(tmp_path):
-    builder = three_step_builder().launch_forward(5, 2, reqs=2, tokens=4096).launch_forward(105, 2, reqs=64, tokens=64)
+    builder = (
+        three_step_builder()
+        .launch_forward(5, 2, reqs=2, tokens=4096)
+        .launch_forward(105, 2, reqs=64, tokens=64)
+    )
     summary = summarize(trace_file(tmp_path, builder), Options())
     assert [(p.phase, p.steps) for p in summary.phases] == [("prefill", 1), ("decode", 1), ("unknown", 1)]
 
@@ -90,7 +93,9 @@ def test_trace_without_any_gpu_events_warns(tmp_path):
 
 
 def test_loader_warnings_are_carried_through(tmp_path):
-    builder = three_step_builder().raw({"ph": "X", "cat": "kernel", "name": "k", "pid": 0, "ts": "NaN", "dur": 1})
+    builder = three_step_builder().raw(
+        {"ph": "X", "cat": "kernel", "name": "k", "pid": 0, "ts": "NaN", "dur": 1}
+    )
     summary = summarize(trace_file(tmp_path, builder), Options(prefill_steps=1))
     assert any("skipped 1" in w for w in summary.warnings)
 
@@ -112,7 +117,8 @@ def test_user_rules_change_the_categories(tmp_path):
     rules = tmp_path / "rules.toml"
     rules.write_text('[[rule]]\ncategory = "mine"\npattern = "elementwise"\n')
     summary = summarize(
-        trace_file(tmp_path, three_step_builder()), Options(prefill_steps=1, rules=str(rules), no_default_rules=True)
+        trace_file(tmp_path, three_step_builder()),
+        Options(prefill_steps=1, rules=str(rules), no_default_rules=True),
     )
     assert summary.phases[1].exclusive_mean == {"mine": D(20)}
-    assert summary.phases[0].exclusive_mean["other"] == D(55)
+    assert summary.phases[0].exclusive_mean == {"other": D(50), "memcpy": D(5)}
