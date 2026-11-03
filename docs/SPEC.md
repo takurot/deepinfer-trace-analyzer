@@ -1,6 +1,6 @@
 # 機能仕様書: deepinfer-trace-analyzer
 
-- 版: 0.2（ドラフト）
+- 版: 0.3（ドラフト）
 - 対象: DeepInfer `main` @ `5537415` が出力する torch chrome trace
 - 以下で `file:line` と書く箇所は、すべて DeepInfer リポジトリ内のパスを指す。
 
@@ -43,7 +43,7 @@
 - CPU と GPU のイベントは、`args.correlation` で対応する（`_trace.py:14`）。CUDA Graph の再生では、1 つの `cudaGraphLaunch` に複数のカーネルが同じ correlation で対応する。
 - step の開始点は、`name == "deepinfer:schedule"` のイベントの `ts` である。この名前は `deepinfer/timer.py:60` の `record_function(f"deepinfer:{record_name or name}")` が、`llm_engine.py:881` の `cpu_timer.record("schedule")` から記録する。
 - 各 step の CPU 側には `deepinfer:launch_forward_N{reqs}_B{tokens}` が記録される（`model_runner.py:322`）。
-- **重要:** `DEEPINFER_ZERO_OVERHEAD_SCHEDULING=1` のとき、decode では step k の後処理が step k+1 に回される（`worker.py:183-185`）。このため step k の GPU カーネルは、時刻としては step k+1 の窓に入ることがある。GPU イベントを時刻だけで step 窓に振り分けると、帰属を誤る。
+- **重要:** `DEEPINFER_ZERO_OVERHEAD_SCHEDULING=1` のとき、decode では step k の後処理が step k+1 に回される（`worker.py:183-185`）。このため step k の GPU カーネルは、時刻としては step k+1 の窓に入ることがある。窓ごとの GPU 時間は「その窓の間に GPU が実際にしていたこと」であり、step k+1 の窓には step k の末尾が混ざる。定常状態の平均には影響しないが、1 step ずつ見るときは §FR-2 の `spill_ratio` で混ざり具合を確かめる。
 - profile server の trace は、`LLMEngine.step` の冒頭（schedule の前）でプロファイラを開始・停止する（`llm_engine.py:878-879`、`profile_server.py:256-269`）。そのため schedule は N 個入り、最後の step は停止時点で打ち切られる。プロファイラ起動直後の step は、起動コストで遅くなる（`benchmark.py:515` のコメント）。
 
 ## 4. 機能要件
@@ -62,11 +62,13 @@
 - step k の窓は `[schedule_ts[k], schedule_ts[k+1])` とする。segment の最後の step は、その segment の最後のイベントの終了時刻までとする。
 - benchmark の trace では、`_rebase` によって decode segment の先頭が prefill segment の終端にぴったり接続される（`_trace.py:176`）。そのため、segment の境界をまたぐ step はない。境界は「先頭から `--prefill-steps` 個目の schedule の次」として扱い、境界の直前の step はそこで打ち切る。境界の前後の時間差は人工的に 0 になっているので、step 間の隙間として数えない。
 
-**GPU イベントの step への帰属**
+**GPU イベントの step への割り当て**
 
-- GPU イベントは、launch の `ts` が入っている step 窓に帰属させる。これで、zero-overhead scheduling のもとでも、カーネルは自分を launch した step に数えられる。
-- launch が見つからない GPU イベントは、自身の `ts` が入っている step 窓に帰属させる。こうしたイベントの割合（時間ベース）を `unmatched_ratio` として出す。
-- どの step にも入らない GPU イベント（最初の schedule より前に launch されたものなど）は捨て、その件数を出す。
+- 時間の分解（§FR-4）は、GPU イベントの区間 `[ts, ts+dur)` を step 窓で切り取って行う。窓をまたぐイベントは、窓ごとに切り分ける。窓の長さの合計は壁時計の時間なので、`Σexclusive + idle = step_time` が成り立つ。
+- どの窓にも入らない GPU 時間（最初の schedule より前、最後の窓より後）は捨て、その時間（μs）を `dropped_gpu_us` として出す。
+- **診断値:** launch は、時間の分解には使わず、次の 2 つの診断にだけ使う。
+  - `unmatched_ratio` = launch の CPU イベントが見つからない GPU イベントの `dur` の合計 / 全 GPU イベントの `dur` の合計。
+  - `spill_ratio` = 窓 k に入った GPU の稼働時間のうち、窓 k より前の step で launch されたカーネルの時間の割合。zero-overhead scheduling では 0 より大きくなる。launch が見つからないカーネルは数えない。
 
 **phase の判定**（優先順）
 
@@ -114,7 +116,7 @@ pattern = "deep_gemm|fp8_gemm"
 step ごと、device ごとに、次のように時間を分ける。
 
 - `step_time` = step 窓の長さ。
-- `busy_union` = その step に帰属した GPU イベントの区間の和集合のうち、step 窓と重なる部分の長さ。
+- `busy_union` = GPU イベントの区間の和集合のうち、step 窓と重なる部分の長さ。
 - `idle` = `step_time - busy_union`。
 - **exclusive 時間:** `busy_union` を時刻ごとに分け、その時刻に動いているイベントのうち、優先度が最も高いカテゴリに割り当てる。優先度は、計算系（`gemm.*`、`attn.*`、`tilelang`、`sampler`、`other`）> `memcpy` > 通信系（`comm.*`）の順とする。同じ階層の中では、規則表の順に従う。
   - これにより、通信の exclusive 時間は「計算に隠れずに見えている通信（exposed comm）」になる。
@@ -146,7 +148,7 @@ phase（prefill / decode / unknown）ごとに、次の値を出す。
 - カテゴリごとの inclusive 時間（1 step あたりの平均）
 - `idle` と `overlap` の 1 step あたりの平均と構成比
 - `other` の構成比（exclusive 時間ベース）
-- `unmatched_ratio`
+- `unmatched_ratio`、`spill_ratio`、`dropped_gpu_us`
 - `deepinfer:bubble` の 1 step あたりの平均
 
 ### FR-7 `diff` コマンド
@@ -197,7 +199,9 @@ CI でしきい値をチェックする用途は v0.2 以降で検討する。
    - schedule が 2 回以上あり、2 ストリームで重なるカーネル（計算と通信）を含む。
    - correlation の対応があるものとないものを含む。
    - step k に launch されたカーネルが、時刻としては step k+1 の窓で実行される（zero-overhead scheduling の模擬）。
-   - 確かめる値: step の分割、GPU イベントの step への帰属、`busy_union`、`idle`、カテゴリ別の exclusive / inclusive 時間、`overlap`。
+   - 確かめる値: step の分割、GPU イベントの step 窓での切り取り、`busy_union`、`idle`、カテゴリ別の exclusive / inclusive 時間、`overlap`。
+   - 窓をまたぐカーネルが、2 つの窓に切り分けられる。
+   - `spill_ratio` と `unmatched_ratio` の値。
    - すべての step で `Σ exclusive + idle = step_time` が成り立つ。
 2. 実機で取った benchmark の trace（decode、EP8）で、`other` の構成比が 10% 以下になるまで既定の規則を改訂する。
 3. 同じ trace 同士で `diff` を取ると、すべての差分が 0 になる。
@@ -208,7 +212,7 @@ CI でしきい値をチェックする用途は v0.2 以降で検討する。
 
 | 判断 | 採らなかった案 | 理由 |
 |---|---|---|
-| GPU イベントは launch の時刻で step に帰属させる | GPU イベント自身の時刻で step 窓に振り分ける（0.1 版） | zero-overhead scheduling では GPU の実行が次の step の窓にずれ込む（`worker.py:183`）。時刻で振り分けると、step ごとのカテゴリ構成が 1 step ずれて混ざる |
+| 時間の分解は GPU イベントの時刻で step 窓を切り取って行い、launch は診断（`spill_ratio`、`unmatched_ratio`）にだけ使う | 各カーネルを launch した step に帰属させる（0.2 版） | 帰属と窓の切り取りを両立させられない。zero-overhead scheduling でカーネルが次の窓に流れ込むと、帰属先の窓では窓の外、実行された窓では帰属が違うので、どちらの step にも数えられず `idle` が過大になる。時刻で切り取れば、窓の長さの合計が壁時計の時間と一致し、恒等式が実態と合う。代償は、窓 k+1 に step k の末尾が混ざることで、これは `spill_ratio` で見える |
 | exclusive 時間（優先度による分配）を主な指標にする | inclusive 時間（`dur` の単純な和）を主にし、食い違いを「説明できない残差」として出す（0.1 版） | inclusive 時間では、重なりがあると差分の和が step 時間の差分と一致せず、残差を説明できない。exclusive 時間なら分解が厳密に成り立ち、通信は「隠れずに見えている時間」として読める |
 | 規則ファイルは TOML | YAML | `tomllib` は標準ライブラリにあり、依存を増やさない |
 | 境界をまたぐ step を除外しない | 境界をまたぐ区間を除外する（0.1 版） | `_rebase` で境界はぴったり接続されるので、またぐ step はない。除外の規則を入れると、prefill の最後の step（2 step 中の 1 つ）を誤って落とす恐れがあった |
@@ -216,7 +220,7 @@ CI でしきい値をチェックする用途は v0.2 以降で検討する。
 ## 8. 未決事項とリスク
 
 - カーネル名は推測の段階で、実機の trace による補正が前提である。
-- CUPTI が、CUDA Graph の中のカーネルに `cudaGraphLaunch` と同じ correlation ID を付けるかどうかは、torch と CUDA のバージョンに依存する。付かない場合、zero-overhead scheduling のもとで GPU イベントの帰属がずれる。実機の trace の `unmatched_ratio` で確かめる。
+- CUPTI が、CUDA Graph の中のカーネルに `cudaGraphLaunch` と同じ correlation ID を付けるかどうかは、torch と CUDA のバージョンに依存する。付かない場合、`unmatched_ratio` が大きくなり、`spill_ratio` が実際より小さく出る。時間の分解（`idle`、exclusive）には影響しない。実機の trace で確かめる。
 - profile server の trace は driver worker 1 枚分しかない（`profile_server.py:7-8`）。そのため、ランク間の偏りは本ツールでは見えない。
 - profile server はプロファイラを停止した時点で trace を閉じる。最後の step のうち、停止時点でまだ GPU に積まれていたカーネルが trace に入るかどうかは未確認である。必要なら最後の step も `--skip-steps` と同様に外す選択肢を検討する。
 - Ascend（torch_npu）の trace は、GPU イベントの `cat` やカーネル名が異なる可能性がある。v0.1 では、壊れずに読めること（受け入れ基準 5）だけを保証する。GPU イベントとして認識できない場合、すべての step が idle 100% になるので、その場合は警告を出す。
