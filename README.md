@@ -2,7 +2,7 @@
 
 [DeepInfer](https://github.com/deepseek-ai/DeepInfer) が出力する torch profiler の chrome trace を、step 単位・カーネルのカテゴリ単位で集計する CLI。設定を変える前と後の 2 つの trace の差分も出せる。
 
-> **ステータス: v0.1 開発中。** `summary` と `diff` は動作します。実機の trace による分類規則の確認は未完了です（[docs/SPEC.md](docs/SPEC.md) の §8、Issue #11）。機能仕様は [docs/SPEC.md](docs/SPEC.md) を参照。
+> **ステータス: v0.1 開発中。** `summary` と `diff` は動作します。実機の trace による分類規則の確認は未完了です（[docs/SPEC.md](docs/SPEC.md) の §8、Issue #11）。機能仕様は [docs/SPEC.md](docs/SPEC.md)、実機の trace で検証する手順は [docs/REAL_TRACE_RUNBOOK.md](docs/REAL_TRACE_RUNBOOK.md)、性能は [docs/PERFORMANCE.md](docs/PERFORMANCE.md) を参照。
 
 ## 何をするか
 

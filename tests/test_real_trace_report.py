@@ -1,6 +1,6 @@
-from builders import TraceBuilder
 from real_trace_report import Status, evaluate, main
 
+from builders import TraceBuilder
 from deepinfer_trace_analyzer.summary import Options, summarize
 
 
@@ -75,7 +75,13 @@ def test_the_last_step_is_compared_with_the_others(tmp_path):
 
 def test_main_exits_nonzero_only_on_a_failed_check(tmp_path, capsys):
     good = healthy().write(tmp_path / "good.json")
-    bad = TraceBuilder().schedule(0).schedule(100).kernel("mystery", 10, 80, launch_ts=5).write(tmp_path / "bad.json")
+    bad = (
+        TraceBuilder()
+        .schedule(0)
+        .schedule(100)
+        .kernel("mystery", 10, 80, launch_ts=5)
+        .write(tmp_path / "bad.json")
+    )
     assert main([str(good), "--prefill-steps", "1"]) == 0
     assert "PASS" in capsys.readouterr().out
     assert main([str(bad), "--prefill-steps", "0"]) == 1
