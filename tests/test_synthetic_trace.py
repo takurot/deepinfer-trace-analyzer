@@ -40,3 +40,23 @@ def test_the_file_is_valid_json_with_the_requested_event_shapes(tmp_path):
     kinds = {event.get("cat") for event in events}
     assert {"kernel", "gpu_memcpy", "cuda_runtime", "cpu_op", "user_annotation"} <= kinds
     assert all(isinstance(e["ts"], str) for e in events if e.get("ph") == "X")
+
+
+def test_launches_precede_their_kernels_by_one_microsecond(tmp_path):
+    path = tmp_path / "synthetic.json"
+    generate(path, steps=2, blocks_per_step=3)
+    by_name = {s.name: s for s in summarize(path, Options(prefill_steps=0)).latency.by_name}
+    assert set(by_name) == {"cudaLaunchKernel", "cudaMemcpyAsync"}
+    assert all(s.p50 == 1 and s.p99 == 1 for s in by_name.values())
+    assert by_name["cudaMemcpyAsync"].count == 6 and by_name["cudaLaunchKernel"].count == 30
+
+
+def test_every_correlation_id_is_used_once(tmp_path):
+    path = tmp_path / "synthetic.json"
+    generate(path, steps=2, blocks_per_step=3)
+    ids = [
+        e["args"]["correlation"]
+        for e in json.loads(path.read_text())["traceEvents"]
+        if e.get("cat") == "kernel"
+    ]
+    assert len(ids) == len(set(ids)) == 30

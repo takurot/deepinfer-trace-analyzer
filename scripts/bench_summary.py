@@ -38,19 +38,33 @@ def _parse_cost(stderr: str, flavor: str) -> tuple[float, float]:
 
 
 def _check(document: dict, expected: dict) -> list[str]:
-    problems = []
+    """Compare every number the generator can predict; an empty list means the answer is right."""
     steps = document["steps"]
     if len(steps) != expected["steps"] + 1:
-        problems.append(f"expected {expected['steps'] + 1} steps, got {len(steps)}")
+        return [f"expected {expected['steps'] + 1} steps, got {len(steps)}"]
+    step_time = Decimal(expected["step_time_us"])
+    idle = Decimal(expected["idle_us"])
+    wanted = {
+        "step_time": step_time,
+        "idle": idle,
+        "busy_union": step_time - idle,
+        "overlap": Decimal(expected["overlap_us"]),
+    }
+    problems = []
     for step in steps[: expected["steps"]]:
-        if Decimal(step["step_time"]) != Decimal(expected["step_time_us"]):
-            problems.append(f"step {step['index']}: step_time {step['step_time']}")
-        if {c: Decimal(v) for c, v in step["exclusive"].items()} != {
-            c: Decimal(v) for c, v in expected["exclusive_us"].items()
-        }:
-            problems.append(f"step {step['index']}: exclusive {step['exclusive']}")
-        if Decimal(step["idle"]) != Decimal(expected["idle_us"]):
-            problems.append(f"step {step['index']}: idle {step['idle']}")
+        for key, value in wanted.items():
+            if Decimal(step[key]) != value:
+                problems.append(f"step {step['index']}: {key} {step[key]}, expected {value}")
+        for key in ("exclusive", "inclusive"):
+            got = {c: Decimal(v) for c, v in step[key].items()}
+            want = {c: Decimal(v) for c, v in expected[f"{key}_us"].items()}
+            if got != want:
+                problems.append(f"step {step['index']}: {key} {step[key]}")
+    trailing = steps[-1]  # the closing schedule event: a 1 us step with no GPU work
+    if (Decimal(trailing["step_time"]), Decimal(trailing["idle"]), trailing["exclusive"]) != (1, 1, {}):
+        problems.append(
+            f"trailing step: {trailing['step_time']} us, idle {trailing['idle']}, {trailing['exclusive']}"
+        )
     return problems[:5]
 
 
