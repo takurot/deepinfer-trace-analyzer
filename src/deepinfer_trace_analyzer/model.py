@@ -7,6 +7,8 @@ from pathlib import Path
 
 GPU_CATEGORIES = frozenset({"kernel", "gpu_memcpy", "gpu_memset"})
 MEMORY_CATEGORIES = frozenset({"gpu_memcpy", "gpu_memset"})
+ZERO = Decimal(0)
+IDLE = "idle"
 SCHEDULE_NAME = "deepinfer:schedule"
 BUBBLE_NAME = "deepinfer:bubble"
 

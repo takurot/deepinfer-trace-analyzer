@@ -67,6 +67,9 @@ class Classifier:
         tier = _COMM if category.startswith("comm.") else _COMPUTE
         return (tier, self._order.get(category, len(self._rules)))
 
+    def rules(self) -> list[tuple[str, str]]:
+        return [(rule.category, rule.pattern.pattern) for rule in self._rules]
+
     def categories(self) -> list[str]:
         """Every category this classifier can emit, in rule order, then memcpy and other."""
         return [*self._order, MEMCPY, OTHER]
