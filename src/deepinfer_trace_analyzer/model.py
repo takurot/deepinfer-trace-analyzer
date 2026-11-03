@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from functools import cached_property
 from pathlib import Path
 
 GPU_CATEGORIES = frozenset({"kernel", "gpu_memcpy", "gpu_memset"})
 MEMORY_CATEGORIES = frozenset({"gpu_memcpy", "gpu_memset"})
 SCHEDULE_NAME = "deepinfer:schedule"
+BUBBLE_NAME = "deepinfer:bubble"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,3 +41,17 @@ class Trace:
     schedule_starts: list[Decimal]
     devices: list[int]
     warnings: list[str] = field(default_factory=list)
+
+    @cached_property
+    def launches(self) -> dict[int, CpuEvent]:
+        """The earliest CPU event per correlation id: the launch that queued the GPU work."""
+        earliest: dict[int, CpuEvent] = {}
+        for event in self.cpu_events:
+            known = earliest.get(event.correlation)
+            if event.correlation is not None and (known is None or event.ts < known.ts):
+                earliest[event.correlation] = event
+        return earliest
+
+    @cached_property
+    def bubbles(self) -> list[CpuEvent]:
+        return [event for event in self.cpu_events if event.name == BUBBLE_NAME]
