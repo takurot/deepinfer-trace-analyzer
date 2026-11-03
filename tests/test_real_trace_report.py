@@ -36,7 +36,7 @@ def test_too_much_unclassified_time_fails_and_names_the_share(tmp_path):
 
 
 def test_other_share_exactly_at_the_limit_passes(tmp_path):
-    builder = TraceBuilder().schedule(0).schedule(100)
+    builder = TraceBuilder().schedule(0)
     builder.kernel("deep_gemm", 0, 90, launch_ts=-1).kernel("mystery", 90, 10, launch_ts=-1)
     path = builder.write(tmp_path / "t.json")
     checks = {c.name: c for c in evaluate(summarize(path, Options(prefill_steps=0)))}
