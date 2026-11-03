@@ -62,6 +62,7 @@ def _table(summary: Summary) -> str:
                 "  " + row[0].ljust(widths[0]) + "  " + "  ".join(row[i].rjust(widths[i]) for i in (1, 2, 3))
             )
         lines += ["  " + _diagnostics(phase), ""]
+    lines += _latency_lines(summary)
     lines += _footer(summary)
     if summary.unclassified is not None:
         lines.append(f"unclassified kernels (top {summary.options.show_unclassified} by total duration)")
@@ -75,6 +76,8 @@ def _markdown(summary: Summary) -> str:
         lines += [f"## {_heading(phase)}", "", "| " + " | ".join(HEADER) + " |", "|---|--:|--:|--:|"]
         lines += [f"| {c} | {e} | {s} | {i} |" for c, e, s, i in _rows(phase)]
         lines += ["", _diagnostics(phase), ""]
+    latency = _latency_lines(summary)
+    lines += [f"**{latency[0]}**", "", *(f"- {line.strip()}" for line in latency[1:-1]), ""]
     lines += _footer(summary)
     if summary.unclassified is not None:
         lines += [
@@ -84,6 +87,15 @@ def _markdown(summary: Summary) -> str:
         ]
         lines += [f"- `{name}` {us(duration)} us" for name, duration in summary.unclassified] or ["- none"]
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _latency_lines(summary: Summary) -> list[str]:
+    report = summary.latency
+    matched = percent(report.matched_fraction)
+    lines = [f"launch latency (CPU launch to first GPU start), {matched} of GPU events matched"]
+    for entry in report.by_name:
+        lines.append(f"  {entry.name}  count {entry.count}  p50 {us(entry.p50)} us  p99 {us(entry.p99)} us")
+    return [*lines, ""]
 
 
 def _footer(summary: Summary) -> list[str]:
@@ -102,6 +114,17 @@ def _document(summary: Summary) -> dict:
         "rules": rules_document(summary.classifier.rules()),
         "phases": [_phase_document(p) for p in summary.phases],
         "steps": [_step_document(t) for t in summary.step_times],
+        "launch_latency": {
+            "matched_events": summary.latency.matched_events,
+            "total_events": summary.latency.total_events,
+            "matched_fraction": None
+            if summary.latency.matched_fraction is None
+            else dec(summary.latency.matched_fraction),
+            "by_name": [
+                {"name": e.name, "count": e.count, "p50": dec(e.p50), "p99": dec(e.p99)}
+                for e in summary.latency.by_name
+            ],
+        },
         "dropped_gpu_us": dec(summary.dropped_gpu_us),
         "unclassified": None
         if summary.unclassified is None

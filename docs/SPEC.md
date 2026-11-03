@@ -131,7 +131,7 @@ device が複数ある trace では、device ごとに計算し、出力にも d
 
 ### FR-5 launch の遅延（v0.1 では参考値）
 
-- correlation ID ごとに、`(その correlation の GPU イベントの最も早い ts) - (launch の ts)` を求め、p50 と p99 を出す。CUDA Graph の再生では、1 つの `cudaGraphLaunch` に対して、最初のカーネルまでの遅延を 1 件として数える。
+- correlation ID ごとに、`(その correlation の GPU イベントの最も早い ts) - (launch の ts)` を求め、p50 と p99 を出す。パーセンタイルは最近順位法（n 件を昇順に並べ、`ceil(p × n / 100)` 番目の値）とする。launch は、同じ correlation を持つ CPU イベントのうち最も早いもの。対象は指定した device の trace 全体で、`--skip-steps` の影響を受けない。CUDA Graph の再生では、1 つの `cudaGraphLaunch` に対して、最初のカーネルまでの遅延を 1 件として数える。
 - launch の名前（`cudaLaunchKernel`、`cudaGraphLaunch` など）ごとに分けて出す。
 - launch と対応が取れた GPU イベントの割合を併記する。
 

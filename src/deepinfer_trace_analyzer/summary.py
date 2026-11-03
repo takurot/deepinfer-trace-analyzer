@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .errors import AnalysisError
+from .latency import LatencyReport, launch_latency
 from .loader import load_trace
 from .model import ZERO
 from .rules import OTHER, Classifier
@@ -57,6 +58,7 @@ class Summary:
     device: int
     classifier: Classifier
     devices: list[int]
+    latency: LatencyReport
     phases: list[PhaseSummary]
     step_times: list[StepTime]
     dropped_gpu_us: Decimal
@@ -100,6 +102,7 @@ def summarize(path: str | Path, options: Options) -> Summary:
         device=options.device,
         classifier=classifier,
         devices=trace.devices,
+        latency=launch_latency(trace, options.device),
         phases=phases,
         step_times=decomposition.steps,
         dropped_gpu_us=decomposition.dropped_gpu_us,
