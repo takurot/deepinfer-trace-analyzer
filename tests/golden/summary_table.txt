@@ -14,3 +14,5 @@ decode: 2 steps, step time mean 60.000 us, max 70.000 us
   other                20.000  33.3%             20.000
   idle                 40.000  66.7%                   
   overlap 0.000 us, bubble 0.000 us, other 33.3%, unmatched 100.0%, spill n/a
+
+launch latency (CPU launch to first GPU start), 0.0% of GPU events matched

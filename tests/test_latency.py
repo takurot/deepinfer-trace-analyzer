@@ -2,7 +2,6 @@ import json
 from decimal import Decimal as D
 
 from builders import TraceBuilder
-
 from deepinfer_trace_analyzer.latency import launch_latency
 from deepinfer_trace_analyzer.loader import load_trace
 from deepinfer_trace_analyzer.render import render_summary

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from .latency import LatencyReport, launch_latency
 from .loader import load_trace
 from .rules import OTHER, Classifier
 from .steps import DEFAULT_PREFILL_THRESHOLD, split_steps
@@ -56,6 +57,7 @@ class Summary:
     device: int
     classifier: Classifier
     devices: list[int]
+    latency: LatencyReport
     phases: list[PhaseSummary]
     step_times: list[StepTime]
     dropped_gpu_us: Decimal
@@ -90,7 +92,8 @@ def summarize(path: str | Path, options: Options) -> Summary:
     if options.show_unclassified is not None:
         unclassified = _top_unclassified(trace, classifier, options, steps[0].start, steps[-1].end)
     return Summary(
-        trace.path, options, options.device, classifier, trace.devices, phases, decomposition.steps,
+        trace.path, options, options.device, classifier, trace.devices,
+        launch_latency(trace, options.device), phases, decomposition.steps,
         decomposition.dropped_gpu_us, unclassified, warnings,
     )  # fmt: skip
 

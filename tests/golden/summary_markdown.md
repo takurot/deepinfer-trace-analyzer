@@ -19,3 +19,5 @@ overlap 10.000 us, bubble 0.000 us, other 0.0%, unmatched 100.0%, spill n/a
 | idle | 40.000 | 66.7% |  |
 
 overlap 0.000 us, bubble 0.000 us, other 33.3%, unmatched 100.0%, spill n/a
+
+**launch latency (CPU launch to first GPU start), 0.0% of GPU events matched**
