@@ -2,7 +2,7 @@
 
 ## prefill: 1 step, step time mean 100.000 us, max 100.000 us
 
-| category | exclusive us/step | share | inclusive us/step |
+| category | exclusive us/step | % of step | inclusive us/step |
 |---|--:|--:|--:|
 | comm.nccl | 20.000 | 20.0% | 30.000 |
 | gemm.deepgemm | 30.000 | 30.0% | 30.000 |
@@ -13,7 +13,7 @@ overlap 10.000 us, bubble 0.000 us, other 0.0%, unmatched 100.0%, spill n/a
 
 ## decode: 2 steps, step time mean 60.000 us, max 70.000 us
 
-| category | exclusive us/step | share | inclusive us/step |
+| category | exclusive us/step | % of step | inclusive us/step |
 |---|--:|--:|--:|
 | other | 20.000 | 33.3% | 20.000 |
 | idle | 40.000 | 66.7% |  |

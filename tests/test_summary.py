@@ -1,6 +1,9 @@
 from decimal import Decimal as D
 
+import pytest
+
 from builders import TraceBuilder
+from deepinfer_trace_analyzer.errors import AnalysisError
 from deepinfer_trace_analyzer.summary import Options, summarize
 
 
@@ -79,17 +82,28 @@ def test_bubble_average_is_reported(tmp_path):
     assert summarize(trace_file(tmp_path, builder), Options(prefill_steps=0)).phases[0].bubble_mean == D(6)
 
 
-def test_missing_device_warns_and_is_all_idle(tmp_path):
+def test_a_device_the_trace_does_not_have_is_an_analysis_error(tmp_path):
     builder = TraceBuilder().schedule(0).schedule(100).gpu("k", 10, 5)
-    summary = summarize(trace_file(tmp_path, builder), Options(prefill_steps=0, device=5))
-    assert summary.phases[0].idle_mean == summary.phases[0].step_time_mean
-    assert any("device 5" in w for w in summary.warnings)
+    with pytest.raises(AnalysisError, match="device 5.*\\[0\\]"):
+        summarize(trace_file(tmp_path, builder), Options(prefill_steps=0, device=5))
 
 
-def test_trace_without_any_gpu_events_warns(tmp_path):
+def test_trace_without_any_gpu_events_warns_and_is_all_idle(tmp_path):
     builder = TraceBuilder().schedule(0).schedule(100)
-    summary = summarize(trace_file(tmp_path, builder), Options(prefill_steps=0))
-    assert any("no GPU events" in w for w in summary.warnings)
+    summary = summarize(trace_file(tmp_path, builder), Options(prefill_steps=0, device=3))
+    assert summary.warnings == [
+        "the trace has no GPU events, so every step shows 100% idle (a non-CUDA trace?)"
+    ]
+    assert summary.phases[0].idle_mean == summary.phases[0].step_time_mean
+
+
+def test_unsplit_phases_are_flagged_with_the_remedy(tmp_path):
+    summary = summarize(trace_file(tmp_path, three_step_builder()), Options())
+    assert any("--prefill-steps" in w for w in summary.warnings)
+    assert not any(
+        "--prefill-steps" in w
+        for w in summarize(trace_file(tmp_path, three_step_builder()), Options(prefill_steps=1)).warnings
+    )
 
 
 def test_loader_warnings_are_carried_through(tmp_path):
@@ -122,3 +136,28 @@ def test_user_rules_change_the_categories(tmp_path):
     )
     assert summary.phases[1].exclusive_mean == {"mine": D(20)}
     assert summary.phases[0].exclusive_mean == {"other": D(50), "memcpy": D(5)}
+
+
+def unclassified(tmp_path, builder, count=5, **options):
+    summary = summarize(
+        trace_file(tmp_path, builder), Options(prefill_steps=0, show_unclassified=count, **options)
+    )
+    return summary.unclassified
+
+
+def test_unclassified_ties_are_broken_by_name(tmp_path):
+    builder = TraceBuilder().schedule(100).schedule(200).gpu("b", 110, 7).gpu("a", 130, 7).gpu("z", 150, 9)
+    assert [name for name, _ in unclassified(tmp_path, builder)] == ["z", "a", "b"]
+
+
+def test_unclassified_only_counts_the_chosen_device_and_the_analysed_span(tmp_path):
+    builder = TraceBuilder().schedule(100).schedule(200)
+    builder.gpu("other_device", 110, 5, device=1).gpu("before_first_step", 50, 5)
+    builder.gpu("on_the_first_boundary", 100, 3).gpu("kept", 150, 4)
+    assert unclassified(tmp_path, builder) == [("kept", D(4)), ("on_the_first_boundary", D(3))]
+    assert unclassified(tmp_path, builder, device=1) == [("other_device", D(5))]
+
+
+def test_unclassified_is_empty_when_everything_is_classified(tmp_path):
+    builder = TraceBuilder().schedule(0).schedule(100).gpu("deep_gemm", 10, 5).gpu("nccl", 20, 5)
+    assert unclassified(tmp_path, builder) == []

@@ -6,8 +6,9 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from .diff import compare
-from .errors import AnalyzerError
-from .render import render_diff, render_summary
+from .errors import AnalysisError, AnalyzerError
+from .render import render_summary
+from .render_diff import render_diff
 from .summary import Options, summarize
 
 
@@ -39,20 +40,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _options(args: argparse.Namespace) -> Options:
+def _options(args: argparse.Namespace, show_unclassified: int | None = None) -> Options:
+    threshold = Decimal(str(args.prefill_threshold))
+    if not threshold.is_finite() or threshold <= 0:
+        raise AnalysisError(
+            f"--prefill-threshold must be a positive finite number, got {args.prefill_threshold}"
+        )
+    if show_unclassified is not None and show_unclassified < 1:
+        raise AnalysisError(f"--show-unclassified needs a count of at least 1, got {show_unclassified}")
     return Options(
         prefill_steps=args.prefill_steps,
-        prefill_threshold=Decimal(str(args.prefill_threshold)),
+        prefill_threshold=threshold,
         skip_steps=args.skip_steps,
         rules=args.rules,
         no_default_rules=args.no_default_rules,
         device=args.device,
-        show_unclassified=getattr(args, "show_unclassified", None),
+        show_unclassified=show_unclassified,
     )
 
 
 def _run_summary(args: argparse.Namespace) -> str:
-    summary = summarize(args.trace, _options(args))
+    summary = summarize(args.trace, _options(args, args.show_unclassified))
     for warning in summary.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     return render_summary(summary, args.format)
