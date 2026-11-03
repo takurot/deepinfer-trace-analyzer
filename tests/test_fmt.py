@@ -1,6 +1,7 @@
 from decimal import Decimal as D
 
 import pytest
+
 from deepinfer_trace_analyzer.fmt import dec, signed, us
 
 
