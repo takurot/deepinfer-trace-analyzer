@@ -56,6 +56,7 @@ class Summary:
     options: Options
     device: int
     classifier: Classifier
+    devices: list[int]
     phases: list[PhaseSummary]
     step_times: list[StepTime]
     dropped_gpu_us: Decimal
@@ -98,6 +99,7 @@ def summarize(path: str | Path, options: Options) -> Summary:
         options=options,
         device=options.device,
         classifier=classifier,
+        devices=trace.devices,
         phases=phases,
         step_times=decomposition.steps,
         dropped_gpu_us=decomposition.dropped_gpu_us,

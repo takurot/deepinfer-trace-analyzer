@@ -1,0 +1,35 @@
+before: TMP/before.json
+after: TMP/after.json
+device: 0
+
+exclusive: time given to one category at a time, so the rows add up to the step time.
+inclusive: time each category is active, so categories that overlap double-count.
+overlap: inclusive total minus busy time. idle: no GPU work.
+
+prefill: 1 vs 1 steps, step time (mean per step) 100.000 -> 100.000 us (+0.000)
+  largest change: comm.nccl -20.000 us, idle (no GPU work) +20.000 us
+  exclusive
+    category            before us  after us  delta us  % of step before  % of step after  delta pt
+    comm.nccl              20.000     0.000   -20.000             20.0%             0.0%   -20.000
+    idle (no GPU work)     45.000    65.000   +20.000             45.0%            65.0%   +20.000
+    gemm.deepgemm          30.000    30.000    +0.000             30.0%            30.0%    +0.000
+    memcpy                  5.000     5.000    +0.000              5.0%             5.0%    +0.000
+  inclusive
+    category       before us  after us  delta us
+    comm.nccl         30.000    20.000   -10.000
+    gemm.deepgemm     30.000    30.000    +0.000
+    memcpy             5.000     5.000    +0.000
+  overlap 10.000 -> 20.000 us (+10.000)
+  check: rows add up to the step-time change (+0.000 us), residual 0.000 us
+
+decode: 1 vs 1 steps, step time (mean per step) 50.000 -> 40.000 us (-10.000)
+  largest change: gemm.deepgemm -5.000 us, idle (no GPU work) -5.000 us
+  exclusive
+    category            before us  after us  delta us  % of step before  % of step after  delta pt
+    gemm.deepgemm          30.000    25.000    -5.000             60.0%            62.5%    +2.500
+    idle (no GPU work)     20.000    15.000    -5.000             40.0%            37.5%    -2.500
+  inclusive
+    category       before us  after us  delta us
+    gemm.deepgemm     30.000    25.000    -5.000
+  overlap 0.000 -> 0.000 us (+0.000)
+  check: rows add up to the step-time change (-10.000 us), residual 0.000 us
