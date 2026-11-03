@@ -113,3 +113,64 @@ def test_trace_without_schedule_is_analysis_error(tmp_path):
     builder = TraceBuilder().kernel("k", 1, 1)
     with pytest.raises(AnalysisError, match="deepinfer:schedule"):
         load_trace(builder.write(tmp_path / "t.json"))
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"ph": "X", "cat": "kernel", "name": "k", "pid": 0, "tid": 1, "ts": "NaN", "dur": 1},
+        {"ph": "X", "cat": "kernel", "name": "k", "pid": 0, "tid": 1, "ts": 1, "dur": "Infinity"},
+        {"ph": "X", "cat": "kernel", "name": "k", "pid": 0, "tid": 1, "ts": 1, "dur": -5},
+        {"ph": "X", "cat": "gpu_memcpy", "name": "k", "pid": 0, "tid": 1, "ts": 1},
+    ],
+)
+def test_non_finite_negative_or_incomplete_gpu_events_are_skipped_and_counted(tmp_path, event):
+    builder = sample().raw(event)
+    trace = load_trace(builder.write(tmp_path / "t.json"))
+    assert len(trace.gpu_events) == 2
+    assert any("skipped 1" in w for w in trace.warnings)
+
+
+def test_malformed_deepinfer_cpu_event_is_counted_not_silent(tmp_path):
+    builder = sample().raw({"ph": "X", "name": "deepinfer:bubble", "pid": 1, "tid": 1, "ts": "NaN", "dur": 1})
+    trace = load_trace(builder.write(tmp_path / "t.json"))
+    assert any("skipped 1" in w for w in trace.warnings)
+    assert trace.schedule_starts == [Decimal(100), Decimal(200)]
+
+
+def test_nan_schedule_timestamp_cannot_poison_step_starts(tmp_path):
+    builder = sample().raw(
+        {"ph": "X", "name": "deepinfer:schedule", "pid": 1, "tid": 1, "ts": "NaN", "dur": 1}
+    )
+    trace = load_trace(builder.write(tmp_path / "t.json"))
+    assert trace.schedule_starts == [Decimal(100), Decimal(200)]
+
+
+def test_gpu_user_annotation_is_not_kept_on_the_cpu_side(tmp_path):
+    annotation = {
+        "ph": "X",
+        "cat": "gpu_user_annotation",
+        "name": "ann",
+        "pid": 0,
+        "tid": 1,
+        "ts": 1,
+        "dur": 1,
+    }
+    annotation["args"] = {"correlation": 5}
+    trace = load_trace(sample().raw(annotation).write(tmp_path / "t.json"))
+    assert "ann" not in {e.name for e in trace.cpu_events}
+    assert "ann" not in {e.name for e in trace.gpu_events}
+
+
+def test_trace_events_that_is_not_an_array_is_input_error(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text('{"traceEvents": {"a": 1}}')
+    with pytest.raises(InputError, match="traceEvents"):
+        load_trace(path)
+
+
+def test_invalid_utf8_inside_the_document_is_input_error(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_bytes(b'{"traceEvents": [{"ph": "X", "name": "\xff\xfe", "pid": 0, "ts": 1, "dur": 1}]}')
+    with pytest.raises(InputError):
+        load_trace(path)
