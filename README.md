@@ -2,7 +2,7 @@
 
 [DeepInfer](https://github.com/deepseek-ai/DeepInfer) が出力する torch profiler の chrome trace を、step 単位・カーネルのカテゴリ単位で集計する CLI。設定を変える前と後の 2 つの trace の差分も出せる。
 
-> **ステータス: 仕様策定段階（未実装）。** 機能仕様は [docs/SPEC.md](docs/SPEC.md) を参照。
+> **ステータス: v0.1 開発中。** `summary` と `diff` は動作します。実機の trace による分類規則の確認は未完了です（[docs/SPEC.md](docs/SPEC.md) の §8、Issue #11）。機能仕様は [docs/SPEC.md](docs/SPEC.md) を参照。
 
 ## 何をするか
 
@@ -14,12 +14,18 @@
 
 プロファイラが入ると step 時間は膨らむ（DeepInfer の README によると最大約 50%）。そのため本ツールは、**絶対値より構成比と差分**を見るためのものとして設計する。
 
-## 使い方（予定）
+## 使い方
 
 ```bash
-deepinfer-trace-analyzer summary trace.json
-deepinfer-trace-analyzer diff before.json after.json --format markdown
+uv sync
+uv run deepinfer-trace-analyzer summary trace.json --prefill-steps 2
+uv run deepinfer-trace-analyzer diff before.json after.json --prefill-steps 2 --format markdown
 ```
+
+- `benchmark.py` の trace は prefill 2 step と decode 3 step をつないだものなので、`--prefill-steps 2` を付けます。profile server の trace は、`--skip-steps 1` でプロファイラ起動直後の step を外すのを勧めます。
+- 分類されなかったカーネルは `--show-unclassified` で見られます。規則は TOML で足せます（`--rules rules.toml`、書式は SPEC の FR-3）。
+- 結果は標準出力、警告は標準エラーに出ます。`--format json` は機械で読める形です。
+- 終了コードは、成功が 0、入力が読めないのが 1、読めたが解析できないのが 2 です。
 
 DeepInfer 本体にも GPU にも依存しない、純粋な Python の JSON 処理として実装する。
 

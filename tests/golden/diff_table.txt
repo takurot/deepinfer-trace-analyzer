@@ -1,0 +1,29 @@
+before: TMP/before.json
+after: TMP/after.json
+device: 0
+
+prefill: 1 vs 1 steps, step time 100.000 -> 100.000 us (+0.000)
+  exclusive
+    category       before us  after us  delta us  share before  share after  delta pt
+    comm.nccl         20.000     0.000   -20.000         20.0%         0.0%   -20.000
+    idle              45.000    65.000   +20.000         45.0%        65.0%   +20.000
+    gemm.deepgemm     30.000    30.000    +0.000         30.0%        30.0%    +0.000
+    memcpy             5.000     5.000    +0.000          5.0%         5.0%    +0.000
+  inclusive
+    category       before us  after us  delta us  share before  share after  delta pt
+    comm.nccl         30.000    20.000   -10.000                                     
+    gemm.deepgemm     30.000    30.000    +0.000                                     
+    memcpy             5.000     5.000    +0.000                                     
+  overlap 10.000 -> 20.000 us (+10.000)
+  step time change +0.000 us = sum of rows, residual 0.000 us
+
+decode: 1 vs 1 steps, step time 50.000 -> 40.000 us (-10.000)
+  exclusive
+    category       before us  after us  delta us  share before  share after  delta pt
+    gemm.deepgemm     30.000    25.000    -5.000         60.0%        62.5%    +2.500
+    idle              20.000    15.000    -5.000         40.0%        37.5%    -2.500
+  inclusive
+    category       before us  after us  delta us  share before  share after  delta pt
+    gemm.deepgemm     30.000    25.000    -5.000                                     
+  overlap 0.000 -> 0.000 us (+0.000)
+  step time change -10.000 us = sum of rows, residual 0.000 us

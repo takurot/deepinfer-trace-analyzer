@@ -55,6 +55,7 @@ class Summary:
     options: Options
     device: int
     classifier: Classifier
+    devices: list[int]
     phases: list[PhaseSummary]
     step_times: list[StepTime]
     dropped_gpu_us: Decimal
@@ -89,7 +90,7 @@ def summarize(path: str | Path, options: Options) -> Summary:
     if options.show_unclassified is not None:
         unclassified = _top_unclassified(trace, classifier, options, steps[0].start, steps[-1].end)
     return Summary(
-        trace.path, options, options.device, classifier, phases, decomposition.steps,
+        trace.path, options, options.device, classifier, trace.devices, phases, decomposition.steps,
         decomposition.dropped_gpu_us, unclassified, warnings,
     )  # fmt: skip
 

@@ -3,8 +3,8 @@ from decimal import Decimal as D
 from pathlib import Path
 
 import pytest
-from builders import TraceBuilder
 
+from builders import TraceBuilder
 from deepinfer_trace_analyzer import cli
 from deepinfer_trace_analyzer.diff import compare
 from deepinfer_trace_analyzer.render import render_diff
@@ -41,7 +41,9 @@ def summary_of(tmp_path, builder, name, **options):
 
 
 def diff_of(tmp_path):
-    return compare(summary_of(tmp_path, before_builder(), "before"), summary_of(tmp_path, after_builder(), "after"))
+    return compare(
+        summary_of(tmp_path, before_builder(), "before"), summary_of(tmp_path, after_builder(), "after")
+    )
 
 
 def rows(phase):
@@ -51,9 +53,17 @@ def rows(phase):
 def test_exposed_comm_moves_to_idle_when_it_hides_under_compute(tmp_path):
     prefill = diff_of(tmp_path).phases[0]
     assert prefill.phase == "prefill"
-    assert (prefill.step_time_before, prefill.step_time_after, prefill.step_time_delta) == (D(100), D(100), D(0))
+    assert (prefill.step_time_before, prefill.step_time_after, prefill.step_time_delta) == (
+        D(100),
+        D(100),
+        D(0),
+    )
     by_name = rows(prefill)
-    assert (by_name["comm.nccl"].before, by_name["comm.nccl"].after, by_name["comm.nccl"].delta) == (D(20), D(0), D(-20))
+    assert (by_name["comm.nccl"].before, by_name["comm.nccl"].after, by_name["comm.nccl"].delta) == (
+        D(20),
+        D(0),
+        D(-20),
+    )
     assert by_name["idle"].delta == D(20)
     assert by_name["gemm.deepgemm"].delta == D(0) and by_name["memcpy"].delta == D(0)
 
@@ -97,7 +107,12 @@ def test_diffing_a_trace_with_itself_changes_nothing_and_warns_about_nothing(tmp
 
 
 def test_per_step_means_make_traces_of_different_length_comparable(tmp_path):
-    longer = before_builder().schedule(200).kernel("deep_gemm", 210, 20, launch_ts=205).kernel("tail", 240, 10, launch_ts=235)
+    longer = (
+        before_builder()
+        .schedule(200)
+        .kernel("deep_gemm", 210, 20, launch_ts=205)
+        .kernel("tail", 240, 10, launch_ts=235)
+    )
     a = summary_of(tmp_path, before_builder(), "a")
     b = summary_of(tmp_path, longer, "b")
     decode = compare(a, b).phases[1]
@@ -116,7 +131,9 @@ def test_warns_when_a_trace_is_poorly_matched_or_poorly_classified(tmp_path):
 
 def test_warns_when_the_device_count_differs(tmp_path):
     two_devices = before_builder().gpu("nccl", 20, 5, device=1)
-    warnings = compare(summary_of(tmp_path, before_builder(), "x"), summary_of(tmp_path, two_devices, "y")).warnings
+    warnings = compare(
+        summary_of(tmp_path, before_builder(), "x"), summary_of(tmp_path, two_devices, "y")
+    ).warnings
     assert any("device" in w for w in warnings)
 
 
@@ -145,7 +162,12 @@ def test_json_has_both_traces_phases_and_exact_deltas(tmp_path):
     assert document["before"].endswith("before.json") and document["after"].endswith("after.json")
     prefill = document["phases"][0]
     nccl = next(r for r in prefill["rows"] if r["name"] == "comm.nccl")
-    assert (D(nccl["before"]), D(nccl["after"]), D(nccl["delta"]), D(nccl["share_delta_pt"])) == (20, 0, -20, -20)
+    assert (D(nccl["before"]), D(nccl["after"]), D(nccl["delta"]), D(nccl["share_delta_pt"])) == (
+        20,
+        0,
+        -20,
+        -20,
+    )
     assert D(prefill["residual"]) == 0
 
 
@@ -163,7 +185,9 @@ def run_cli(capsys, *args):
 def test_cli_diff_json(tmp_path, capsys):
     before = before_builder().write(tmp_path / "b.json")
     after = after_builder().write(tmp_path / "a.json")
-    code, out, err = run_cli(capsys, "diff", str(before), str(after), "--prefill-steps", "1", "--format", "json")
+    code, out, err = run_cli(
+        capsys, "diff", str(before), str(after), "--prefill-steps", "1", "--format", "json"
+    )
     assert code == 0 and err == ""
     assert json.loads(out)["phases"][0]["phase"] == "prefill"
 

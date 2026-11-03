@@ -5,8 +5,9 @@ import sys
 from collections.abc import Sequence
 from decimal import Decimal
 
+from .diff import compare
 from .errors import AnalyzerError
-from .render import render_summary
+from .render import render_diff, render_summary
 from .summary import Options, summarize
 
 
@@ -58,7 +59,11 @@ def _run_summary(args: argparse.Namespace) -> str:
 
 
 def _run_diff(args: argparse.Namespace) -> str:
-    raise NotImplementedError
+    options = _options(args)
+    result = compare(summarize(args.before, options), summarize(args.after, options))
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return render_diff(result, args.format)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
