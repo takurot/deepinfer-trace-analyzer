@@ -22,6 +22,7 @@ packages = ["src/deepinfer_trace_analyzer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 
 [tool.ruff]
 line-length = 110
