@@ -7,7 +7,7 @@ import pytest
 from builders import TraceBuilder
 from deepinfer_trace_analyzer import cli
 from deepinfer_trace_analyzer.diff import compare
-from deepinfer_trace_analyzer.render import render_diff
+from deepinfer_trace_analyzer.render_diff import render_diff
 from deepinfer_trace_analyzer.summary import Options, summarize
 
 GOLDEN = Path(__file__).parent / "golden"
