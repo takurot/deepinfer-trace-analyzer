@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 
 from .diff import Diff, PhaseDiff, Row
-from .fmt import dec, percent, signed, us
+from .fmt import SCHEMA_VERSION, dec, options_document, percent, rules_document, signed, us
 from .model import IDLE
-from .render import SCHEMA_VERSION, options_document, rules_document
 
 EXCLUSIVE_HEADER = (
     "category",

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
-from decimal import Decimal
 
-from .fmt import dec, percent, us
+from .fmt import SCHEMA_VERSION, dec, options_document, percent, rules_document, us
 from .model import IDLE, ZERO
 from .summary import PhaseSummary, Summary
 from .timeline import StepTime
-
-SCHEMA_VERSION = 1
 
 
 def render_summary(summary: Summary, fmt: str) -> str:
@@ -131,18 +127,6 @@ def _document(summary: Summary) -> dict:
         else [{"name": n, "duration_us": dec(d)} for n, d in summary.unclassified],
         "warnings": summary.warnings,
     }
-
-
-def options_document(options) -> dict:
-    return {f.name: _plain(getattr(options, f.name)) for f in fields(options)}
-
-
-def rules_document(rules: list[tuple[str, str]]) -> list[dict]:
-    return [{"category": category, "pattern": pattern} for category, pattern in rules]
-
-
-def _plain(value):
-    return dec(value) if isinstance(value, Decimal) else value
 
 
 def _phase_document(phase: PhaseSummary) -> dict:

@@ -7,7 +7,7 @@ Issue #11 の作業手順です。GPU 実機（NVIDIA SM100、EP8）で取った
 | 名前 | 目的 | 取り方 |
 |---|---|---|
 | A. benchmark、zero-overhead scheduling 有効 | 受け入れ基準 2（`other` ≤ 10%）、`spill`、CUDA Graph の correlation | `DEEPINFER_ZERO_OVERHEAD_SCHEDULING=1 PROFILE=1` で `examples/benchmark.py` を EP8 で実行 |
-| B. benchmark、zero-overhead scheduling 無効 | A との比較（`spill` が 0 に近いはず） | A と同じ設定で `DEEPINFER_ZERO_OVERHEAD_SCHEDULING=0` |
+| B. benchmark、zero-overhead scheduling 無効 | A との比較（`spill` が 0 に近いはず） | A と同じ設定で `DEEPINFER_ZERO_OVERHEAD_SCHEDULING=0` を**明示的に**付ける（未設定のときの既定は engine の種類で決まる: `deepinfer/engine/arg_utils.py:50-55`） |
 | C. profile server | 最後の step の扱い、`--skip-steps` の確認 | 下記 |
 
 **A と B（benchmark）**

@@ -1,6 +1,8 @@
 """Check that this tool finds the same step starts as DeepInfer's examples/_trace.py.
 
-Needs a DeepInfer checkout, so it is not part of CI:
+Needs a DeepInfer checkout, so it is not part of CI. It calls private helpers of
+examples/_trace.py (_normalize_trace_events, _split_events, _step_starts) as they are at DeepInfer
+5537415; if they are renamed, update this script:
 
     uv run python scripts/compare_step_starts.py /path/to/DeepInfer TRACE.json
 """

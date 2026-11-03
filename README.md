@@ -29,6 +29,17 @@ uv run deepinfer-trace-analyzer diff before.json after.json --prefill-steps 2 --
 
 DeepInfer 本体にも GPU にも依存しない、純粋な Python の JSON 処理として実装する。
 
+## 開発
+
+```bash
+uv sync
+uv run pytest          # テスト
+uv run ruff check . && uv run ruff format --check .
+```
+
+- `src/deepinfer_trace_analyzer/` は、読み込み（`loader`）、step の分割（`steps`）、時間の分解（`timeline`）、分類（`rules`）、集計（`summary`、`diff`）、出力（`render`、`render_diff`）に分かれています。
+- `scripts/` は開発用です。`make_synthetic_trace.py` と `bench_summary.py` は性能の確認（[docs/PERFORMANCE.md](docs/PERFORMANCE.md)）、`real_trace_report.py` と `compare_step_starts.py` は実機の trace の検証（[docs/REAL_TRACE_RUNBOOK.md](docs/REAL_TRACE_RUNBOOK.md)）に使います。
+
 ## ライセンス
 
 [MIT](LICENSE)

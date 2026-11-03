@@ -9,12 +9,15 @@ from .diff import compare
 from .errors import AnalysisError, AnalyzerError
 from .render import render_summary
 from .render_diff import render_diff
+from .steps import DEFAULT_PREFILL_THRESHOLD
 from .summary import Options, summarize
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--prefill-steps", type=int, metavar="N")
-    parser.add_argument("--prefill-threshold", type=float, default=16.0, metavar="R")
+    parser.add_argument(
+        "--prefill-threshold", type=float, default=float(DEFAULT_PREFILL_THRESHOLD), metavar="R"
+    )
     parser.add_argument("--skip-steps", type=int, default=0, metavar="K")
     parser.add_argument("--rules", metavar="FILE")
     parser.add_argument("--no-default-rules", action="store_true")
