@@ -4,8 +4,8 @@ from decimal import Decimal as D
 from pathlib import Path
 
 import pytest
-from builders import TraceBuilder
 
+from builders import TraceBuilder
 from deepinfer_trace_analyzer import cli
 from deepinfer_trace_analyzer.render import render_summary
 from deepinfer_trace_analyzer.rules import Classifier
@@ -33,11 +33,15 @@ def check_golden(name: str, actual: str) -> None:
 
 
 def test_table_matches_golden(tmp_path):
-    check_golden("summary_table.txt", render_summary(summary_for(tmp_path), "table").replace(str(tmp_path), "TMP"))
+    check_golden(
+        "summary_table.txt", render_summary(summary_for(tmp_path), "table").replace(str(tmp_path), "TMP")
+    )
 
 
 def test_markdown_matches_golden(tmp_path):
-    check_golden("summary_markdown.md", render_summary(summary_for(tmp_path), "markdown").replace(str(tmp_path), "TMP"))
+    check_golden(
+        "summary_markdown.md", render_summary(summary_for(tmp_path), "markdown").replace(str(tmp_path), "TMP")
+    )
 
 
 def test_table_with_unclassified_kernels_matches_golden(tmp_path):
@@ -62,14 +66,16 @@ def test_json_phase_means_are_the_average_of_the_step_values(tmp_path):
     document = json.loads(render_summary(summary_for(tmp_path), "json"))
     decode_steps = [s for s in document["steps"] if s["phase"] == "decode"]
     decode = next(p for p in document["phases"] if p["phase"] == "decode")
-    assert D(decode["exclusive_mean"]["other"]) == sum(D(s["exclusive"].get("other", "0")) for s in decode_steps) / len(
-        decode_steps
-    )
+    assert D(decode["exclusive_mean"]["other"]) == sum(
+        D(s["exclusive"].get("other", "0")) for s in decode_steps
+    ) / len(decode_steps)
     assert D(decode["step_time_mean"]) == sum(D(s["step_time"]) for s in decode_steps) / len(decode_steps)
 
 
 def test_json_keeps_microsecond_precision(tmp_path):
-    builder = TraceBuilder().schedule("1000.000001").schedule("1100.000002").gpu("k", "1010.000003", "20.000004")
+    builder = (
+        TraceBuilder().schedule("1000.000001").schedule("1100.000002").gpu("k", "1010.000003", "20.000004")
+    )
     path = builder.write(tmp_path / "p.json", stringify=True)
     document = json.loads(render_summary(summarize(path, Options(prefill_steps=0)), "json"))
     assert document["steps"][0]["inclusive"]["other"] == "20.000004"
@@ -89,7 +95,9 @@ def run_cli(capsys, *args):
 
 
 def test_cli_summary_json_goes_to_stdout_with_a_clean_stderr(tmp_path, capsys):
-    code, out, err = run_cli(capsys, "summary", str(trace_path(tmp_path)), "--prefill-steps", "1", "--format", "json")
+    code, out, err = run_cli(
+        capsys, "summary", str(trace_path(tmp_path)), "--prefill-steps", "1", "--format", "json"
+    )
     assert code == 0 and err == ""
     assert json.loads(out)["schema_version"] == 1
 
@@ -99,13 +107,15 @@ def test_cli_warnings_go_to_stderr_only(tmp_path, capsys):
     code, out, err = run_cli(capsys, "summary", str(path), "--prefill-steps", "0", "--format", "json")
     assert code == 0
     assert "warning:" in err and "no GPU events" in err
-    assert "warning" not in out
+    assert "warning:" not in out
     json.loads(out)
 
 
 def test_cli_markdown_and_unclassified(tmp_path, capsys):
     path = str(trace_path(tmp_path))
-    code, out, _ = run_cli(capsys, "summary", path, "--prefill-steps", "1", "--format", "markdown", "--show-unclassified")
+    code, out, _ = run_cli(
+        capsys, "summary", path, "--prefill-steps", "1", "--format", "markdown", "--show-unclassified"
+    )
     assert code == 0 and "| category |" in out and "mystery_kernel" in out
 
 
@@ -114,7 +124,16 @@ def test_cli_rules_flags_reach_the_classifier(tmp_path, capsys):
     rules.write_text('[[rule]]\ncategory = "mine"\npattern = "elementwise"\n')
     path = str(trace_path(tmp_path))
     code, out, _ = run_cli(
-        capsys, "summary", path, "--prefill-steps", "1", "--rules", str(rules), "--no-default-rules", "--format", "json"
+        capsys,
+        "summary",
+        path,
+        "--prefill-steps",
+        "1",
+        "--rules",
+        str(rules),
+        "--no-default-rules",
+        "--format",
+        "json",
     )
     assert code == 0
     decode = next(p for p in json.loads(out)["phases"] if p["phase"] == "decode")

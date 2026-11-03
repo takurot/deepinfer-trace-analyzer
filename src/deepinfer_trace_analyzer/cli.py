@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from decimal import Decimal
 
 from .errors import AnalyzerError
+from .render import render_summary
+from .summary import Options, summarize
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
@@ -35,8 +38,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _options(args: argparse.Namespace) -> Options:
+    return Options(
+        prefill_steps=args.prefill_steps,
+        prefill_threshold=Decimal(str(args.prefill_threshold)),
+        skip_steps=args.skip_steps,
+        rules=args.rules,
+        no_default_rules=args.no_default_rules,
+        device=args.device,
+        show_unclassified=getattr(args, "show_unclassified", None),
+    )
+
+
 def _run_summary(args: argparse.Namespace) -> str:
-    raise NotImplementedError
+    summary = summarize(args.trace, _options(args))
+    for warning in summary.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return render_summary(summary, args.format)
 
 
 def _run_diff(args: argparse.Namespace) -> str:
