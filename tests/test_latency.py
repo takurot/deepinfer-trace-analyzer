@@ -85,3 +85,48 @@ def test_summary_carries_the_latency_and_renders_it(tmp_path):
     entry = document["launch_latency"]
     assert D(entry["matched_fraction"]) == D("0.5")
     assert entry["by_name"][0]["name"] == "cudaLaunchKernel" and D(entry["by_name"][0]["p50"]) == 10
+
+
+def latencies(tmp_path, values, name="cudaLaunchKernel"):
+    builder = base()
+    for index, latency in enumerate(values):
+        corr = builder.corr()
+        launch_ts = 100 + index * 50
+        builder.launch(launch_ts, corr=corr, name=name).gpu("k", launch_ts + latency, 5, corr=corr)
+    return report(tmp_path, builder).by_name[0]
+
+
+def test_nearest_rank_rounds_up_for_small_samples(tmp_path):
+    for values, p50, p99 in (
+        ([5], 5, 5),
+        ([1, 9], 1, 9),
+        ([1, 2, 3], 2, 3),
+        ([1, 2, 3, 4, 5, 6, 7], 4, 7),
+        ([7, 1, 6, 2, 5, 3, 4], 4, 7),
+    ):
+        stats = latencies(tmp_path, values)
+        assert (stats.count, stats.p50, stats.p99) == (len(values), D(p50), D(p99)), values
+
+
+def test_equal_latencies_are_each_counted(tmp_path):
+    stats = latencies(tmp_path, [10, 10, 10, 20])
+    assert (stats.count, stats.p50, stats.p99) == (4, D(10), D(20))
+
+
+def test_launch_names_are_listed_alphabetically(tmp_path):
+    builder = base()
+    builder.kernel("a", 110, 5, launch_ts=100)
+    corr = builder.corr()
+    builder.launch(200, corr=corr, name="cudaGraphLaunch").gpu("g", 250, 5, corr=corr)
+    corr = builder.corr()
+    builder.launch(300, corr=corr, name="cuLaunchKernelEx").gpu("e", 330, 5, corr=corr)
+    assert [s.name for s in report(tmp_path, builder).by_name] == [
+        "cuLaunchKernelEx",
+        "cudaGraphLaunch",
+        "cudaLaunchKernel",
+    ]
+
+
+def test_a_launch_stamped_after_its_kernel_is_reported_as_it_is(tmp_path):
+    stats = latencies(tmp_path, [-5, 3])
+    assert (stats.p50, stats.p99) == (D(-5), D(3))
